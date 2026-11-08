@@ -4,18 +4,19 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.webkit.JsResult;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -28,7 +29,10 @@ import java.nio.charset.StandardCharsets;
  */
 public class MainActivity extends Activity {
 
+    private static final int REQ_PICK_FILE = 1001;
+
     private WebView web;
+    private ValueCallback<Uri[]> filePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,7 +45,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);      // localStorage for saved entries
         s.setAllowFileAccess(false);       // bundled assets still load
-        s.setAllowContentAccess(false);
+        s.setAllowContentAccess(true);     // needed to read the file picked for restore
 
         web.addJavascriptInterface(new Bridge(), "AndroidBridge");
 
@@ -64,9 +68,42 @@ public class MainActivity extends Activity {
                         .show();
                 return true;
             }
+
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(null);
+                }
+                filePathCallback = callback;
+                try {
+                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    startActivityForResult(Intent.createChooser(intent, null), REQ_PICK_FILE);
+                } catch (Exception e) {
+                    filePathCallback = null;
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+                return true;
+            }
         });
 
         web.loadUrl("file:///android_asset/index.html");
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_PICK_FILE) {
+            if (filePathCallback != null) {
+                Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+                filePathCallback.onReceiveValue(result);
+                filePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -79,42 +116,50 @@ public class MainActivity extends Activity {
 
     /** Exposed to the page as window.AndroidBridge. */
     private class Bridge {
+        /**
+         * Saves a text file to the phone.
+         * Returns a short description of where it went, or "" if saving failed.
+         */
         @android.webkit.JavascriptInterface
-        public void saveCsv(String name, String content) {
-            String safe = name == null ? "cashbook.csv" : name.replaceAll("[^A-Za-z0-9._-]", "_");
-            if (!safe.endsWith(".csv")) {
-                safe = safe + ".csv";
+        public String saveFile(String name, String mime, String content) {
+            String safe = name == null ? "cashbook.txt" : name.replaceAll("[^A-Za-z0-9._-]", "_");
+            if (safe.isEmpty()) {
+                safe = "cashbook.txt";
             }
-            String message;
+            String type = "application/json".equals(mime) || "text/csv".equals(mime) ? mime : "text/plain";
             try {
                 byte[] data = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentResolver resolver = getContentResolver();
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.MediaColumns.DISPLAY_NAME, safe);
-                    values.put(MediaStore.MediaColumns.MIME_TYPE, "text/csv");
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, type);
                     values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                     Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                     if (uri == null) {
-                        throw new IllegalStateException("Could not create file");
+                        return "";
                     }
                     try (OutputStream out = resolver.openOutputStream(uri)) {
+                        if (out == null) {
+                            return "";
+                        }
                         out.write(data);
                     }
-                    message = "Saved to Downloads: " + safe;
+                    return "Downloads/" + safe;
                 } else {
                     File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    if (dir == null) {
+                        return "";
+                    }
                     File file = new File(dir, safe);
                     try (FileOutputStream out = new FileOutputStream(file)) {
                         out.write(data);
                     }
-                    message = "Saved to " + file.getAbsolutePath();
+                    return file.getAbsolutePath();
                 }
             } catch (Exception e) {
-                message = "Export failed";
+                return "";
             }
-            final String toast = message;
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, toast, Toast.LENGTH_LONG).show());
         }
     }
 }
