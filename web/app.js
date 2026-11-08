@@ -123,6 +123,11 @@
         rows.push([e.date, e.type === 'in' ? 'Cash in' : 'Cash out', e.amount.toFixed(2), e.category, e.note]);
       });
     var csv = rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
+    // Inside the Android app, downloads of blob: links don't work: use the native bridge.
+    if (window.AndroidBridge && typeof window.AndroidBridge.saveCsv === 'function') {
+      window.AndroidBridge.saveCsv('cashbook-' + today() + '.csv', csv);
+      return;
+    }
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
