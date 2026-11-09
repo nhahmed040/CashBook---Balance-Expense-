@@ -161,3 +161,35 @@ body.view-settings .fab, body.view-reports .fab { display: none; }
 
 .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 40; max-width: 90vw; background: #222a38; color: #fff; padding: 10px 16px; border-radius: 20px; font-size: .9rem; opacity: 0; pointer-events: none; transition: opacity .2s; text-align: center; }
 .toast.show { opacity: 1; }
+
+/* ---- projects ---- */
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.btnrow > button { flex: 1 1 auto; }
+.seg { display: flex; gap: 6px; overflow-x: auto; margin: 0 -14px 14px; padding: 0 14px 4px; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
+.seg button { flex: 0 0 auto; border-radius: 20px; padding: 8px 14px; font-size: .9rem; }
+.seg button.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.pcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+.pcard:active { background: var(--bg); }
+.pcard h3, .sub h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.pcard .kvrow { cursor: inherit; }
+.kvrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: .92rem; }
+.kvrow span:first-child { color: var(--muted); }
+.kvrow b { text-align: right; overflow-wrap: anywhere; }
+.kvrow b.pos { color: var(--in); }
+.kvrow b.neg { color: var(--out); }
+.kvrow.total { border-top: 1px solid var(--border); padding-top: 6px; font-size: 1rem; }
+.warn { background: rgba(214, 64, 47, .12); border: 1px solid var(--out); color: var(--out); border-radius: 10px; padding: 10px 12px; font-weight: 600; }
+.backlink { align-self: flex-start; padding: 6px 12px; margin-bottom: 8px; }
+.sub { display: flex; flex-direction: column; gap: 6px; }
+.sub .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pay { font-size: .82rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pay button { padding: 2px 8px; font-size: .85rem; }
+.attrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.attrow:first-of-type { border-top: 0; }
+.attrow input { width: 88px; text-align: center; }
+.attrow .meta { flex: 1; }
+.paidmark { color: var(--in); font-weight: 700; }
+.note { color: var(--muted); font-size: .88rem; margin: 0; }
+.panel h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }

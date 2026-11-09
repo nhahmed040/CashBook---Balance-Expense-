@@ -57,6 +57,12 @@
       <p id="empty" class="empty" data-i18n="no_entries">No entries yet. Tap + to add one.</p>
     </section>
 
+    <!-- PROJECTS -->
+    <section id="view-projects" class="view" hidden>
+      <div id="projList"></div>
+      <div id="projDetail" hidden></div>
+    </section>
+
     <!-- REPORTS -->
     <section id="view-reports" class="view" hidden>
       <div class="monthnav">
@@ -124,6 +130,7 @@
 
   <nav class="tabs">
     <button type="button" data-view="entries" class="active"><span>📒</span><b data-i18n="entries">Entries</b></button>
+    <button type="button" data-view="projects"><span>🏗️</span><b data-i18n="projects">Projects</b></button>
     <button type="button" data-view="reports"><span>📊</span><b data-i18n="reports">Reports</b></button>
     <button type="button" data-view="settings"><span>⚙️</span><b data-i18n="settings">Settings</b></button>
   </nav>
@@ -141,6 +148,12 @@
       <input type="text" id="category" list="catList" data-i18n-ph="category" placeholder="Category" maxlength="40">
       <datalist id="catList"></datalist>
       <input type="text" id="note" data-i18n-ph="remark" placeholder="Remark (optional)" maxlength="80">
+      <div id="entryProject" class="stack" hidden>
+        <label class="field"><span data-i18n="cost_code">Cost code</span><select id="codeSel"></select></label>
+        <input type="text" id="party" list="partyList" data-i18n-ph="payee" placeholder="Payee / supplier" maxlength="60">
+        <datalist id="partyList"></datalist>
+        <label class="field"><span id="linkLabel"></span><select id="linkSel"></select></label>
+      </div>
       <div class="row">
         <button type="button" id="cancelEntry" data-i18n="cancel">Cancel</button>
         <button type="submit" class="primary" data-i18n="save">Save</button>
@@ -154,6 +167,7 @@
     <div class="modal">
       <h2 data-i18n="books">Books</h2>
       <input type="text" id="bookName" data-i18n-ph="book_name" placeholder="Book name" maxlength="40">
+      <label class="field"><span data-i18n="project">Project</span><select id="bookProject"></select></label>
       <button type="button" id="newBook" class="primary block" data-i18n="new_book">New book</button>
       <button type="button" id="renameBook" class="block" data-i18n="rename_book">Rename</button>
       <button type="button" id="deleteBook" class="block danger" data-i18n="delete_book">Delete book</button>
@@ -175,10 +189,25 @@
     </form>
   </div>
 
+  <!-- Generic form (projects, bills, certificates, workers, payments) -->
+  <div id="formModal" class="overlay">
+    <form id="formForm" class="modal" autocomplete="off">
+      <h2 id="formTitle"></h2>
+      <div id="formBody" class="stack"></div>
+      <p id="formErr" class="err" role="alert"></p>
+      <div class="row">
+        <button type="button" id="formCancel" data-i18n="cancel">Cancel</button>
+        <button type="submit" class="primary" id="formSubmit" data-i18n="save">Save</button>
+      </div>
+      <button type="button" id="formDelete" class="danger block" data-i18n="delete">Delete</button>
+    </form>
+  </div>
+
   <div id="toast" class="toast" role="status"></div>
 
   <script src="logic.js"></script>
   <script src="i18n.js"></script>
+  <script src="i18n-projects.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

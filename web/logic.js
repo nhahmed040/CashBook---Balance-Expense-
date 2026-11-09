@@ -8,6 +8,7 @@
   var LANGS = ['en', 'om', 'am'];
   var CURRENCIES = ['ETB', 'USD', 'EUR', 'GBP', 'KES', 'SAR', 'AED', 'none'];
   var THEMES = ['system', 'light', 'dark'];
+  var CODES = ['materials', 'labour', 'equipment', 'subcontract', 'transport', 'fuel', 'permits', 'overhead', 'other'];
 
   var idCounter = 0;
   function newId() {
@@ -17,6 +18,13 @@
 
   function round2(n) { return Math.round(n * 100) / 100; }
   function str(v, max) { return String(v == null ? '' : v).trim().slice(0, max); }
+  function num(v, min, max) {
+    var n = Number(v);
+    if (!isFinite(n)) n = 0;
+    if (n < min) n = min;
+    if (max != null && n > max) n = max;
+    return round2(n);
+  }
   function isDate(s) {
     if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
     var d = new Date(s + 'T00:00:00Z');
@@ -26,40 +34,148 @@
     var d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
+  function validId(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
 
+  /* Keep the first item for each id; give duplicates a fresh id. */
+  function mapList(list, fn, max) {
+    var seen = {}, out = [];
+    (Array.isArray(list) ? list : []).slice(0, max || 5000).forEach(function (raw) {
+      var x = fn(raw);
+      if (!x) return;
+      while (seen[x.id]) x.id = newId();
+      seen[x.id] = true;
+      out.push(x);
+    });
+    return out;
+  }
+
+  /* ---------- entries ---------- */
   function sanitizeEntry(e) {
     if (!e || typeof e !== 'object') return null;
     var amt = Number(e.amount);
     if (!isFinite(amt) || amt <= 0) return null;
     return {
-      id: (typeof e.id === 'number' && isFinite(e.id)) ? e.id : newId(),
+      id: validId(e.id) ? e.id : newId(),
       type: e.type === 'out' ? 'out' : 'in',
       amount: round2(amt),
       date: isDate(e.date) ? e.date : todayStr(),
       category: str(e.category, 40),
-      note: str(e.note, 80)
+      note: str(e.note, 80),
+      code: CODES.indexOf(e.code) >= 0 ? e.code : '',
+      party: str(e.party, 60),
+      billId: validId(e.billId) ? e.billId : 0,
+      certId: validId(e.certId) ? e.certId : 0
+    };
+  }
+  function uniqueEntries(list) { return mapList(list, sanitizeEntry); }
+
+  /* ---------- project parts ---------- */
+  function sanitizePayment(p) {
+    if (!p || typeof p !== 'object') return null;
+    var a = Number(p.amount);
+    if (!isFinite(a) || a <= 0) return null;
+    return {
+      id: validId(p.id) ? p.id : newId(),
+      date: isDate(p.date) ? p.date : todayStr(),
+      amount: round2(a),
+      entryId: validId(p.entryId) ? p.entryId : 0,
+      bookId: str(p.bookId, 40)
     };
   }
 
-  function uniqueEntries(list) {
-    var seen = {};
-    var out = [];
-    (Array.isArray(list) ? list : []).forEach(function (raw) {
-      var e = sanitizeEntry(raw);
-      if (!e) return;
-      while (seen[e.id]) e.id = newId();
-      seen[e.id] = true;
-      out.push(e);
-    });
-    return out;
+  function sanitizeBill(b) {
+    if (!b || typeof b !== 'object') return null;
+    var a = Number(b.amount);
+    if (!isFinite(a) || a <= 0) return null;
+    return {
+      id: validId(b.id) ? b.id : newId(),
+      date: isDate(b.date) ? b.date : todayStr(),
+      supplier: str(b.supplier, 60),
+      code: CODES.indexOf(b.code) >= 0 ? b.code : 'other',
+      desc: str(b.desc, 80),
+      amount: round2(a),
+      payments: mapList(b.payments, sanitizePayment, 500)
+    };
   }
 
+  function sanitizeCert(c) {
+    if (!c || typeof c !== 'object') return null;
+    var g = Number(c.gross);
+    if (!isFinite(g) || g <= 0) return null;
+    return {
+      id: validId(c.id) ? c.id : newId(),
+      no: str(c.no, 20),
+      date: isDate(c.date) ? c.date : todayStr(),
+      gross: round2(g),
+      advanceRecovery: num(c.advanceRecovery, 0),
+      receipts: mapList(c.receipts, sanitizePayment, 500)
+    };
+  }
+
+  function sanitizeWorker(w) {
+    if (!w || typeof w !== 'object') return null;
+    var name = str(w.name, 60);
+    if (!name) return null;
+    return { id: validId(w.id) ? w.id : newId(), name: name, role: str(w.role, 40), rate: num(w.rate, 0) };
+  }
+
+  function sanitizeAttendance(a) {
+    if (!a || typeof a !== 'object' || !isDate(a.date) || !validId(a.workerId)) return null;
+    return {
+      id: validId(a.id) ? a.id : newId(),
+      date: a.date,
+      workerId: a.workerId,
+      days: num(a.days, 0, 3),
+      rate: num(a.rate, 0),
+      paid: !!a.paid
+    };
+  }
+
+  function sanitizeProject(p, n) {
+    p = p && typeof p === 'object' ? p : {};
+    var budgets = {};
+    if (p.budgets && typeof p.budgets === 'object') {
+      CODES.forEach(function (c) {
+        var v = num(p.budgets[c], 0);
+        if (v > 0) budgets[c] = v;
+      });
+    }
+    var workers = mapList(p.workers, sanitizeWorker, 500);
+    var wIds = {};
+    workers.forEach(function (w) { wIds[w.id] = true; });
+    // one attendance row per worker per day (the last one wins)
+    var attMap = {};
+    mapList(p.attendance, sanitizeAttendance, 50000).forEach(function (a) {
+      if (wIds[a.workerId]) attMap[a.date + '|' + a.workerId] = a;
+    });
+    return {
+      id: str(p.id, 40) || ('p' + newId()),
+      name: str(p.name, 60) || ('Project ' + n),
+      client: str(p.client, 60),
+      location: str(p.location, 60),
+      contractSum: num(p.contractSum, 0),
+      startDate: isDate(p.startDate) ? p.startDate : '',
+      endDate: isDate(p.endDate) ? p.endDate : '',
+      vat: num(p.vat, 0, 100),
+      wht: num(p.wht, 0, 100),
+      retention: num(p.retention, 0, 100),
+      advance: num(p.advance, 0),
+      budgets: budgets,
+      bills: mapList(p.bills, sanitizeBill, 5000),
+      certs: mapList(p.certs, sanitizeCert, 1000),
+      workers: workers,
+      attendance: Object.keys(attMap).map(function (k) { return attMap[k]; })
+    };
+  }
+
+  /* ---------- whole state ---------- */
   function defaultState() {
     return {
-      v: 2,
+      v: 3,
       current: 'main',
       settings: { lang: 'en', currency: 'ETB', theme: 'system', pinHash: '', pinSalt: '' },
-      books: [{ id: 'main', name: 'Main', entries: [] }]
+      books: [{ id: 'main', name: 'Main', projectId: '', entries: [] }],
+      projects: []
     };
   }
 
@@ -78,15 +194,28 @@
       s.settings.pinSalt = rs.pinSalt.slice(0, 64);
     }
 
+    var projects = [], pIds = {};
+    (Array.isArray(raw.projects) ? raw.projects : []).slice(0, 100).forEach(function (rp) {
+      var p = sanitizeProject(rp, projects.length + 1);
+      while (pIds[p.id]) p.id = p.id + '_';
+      pIds[p.id] = true;
+      projects.push(p);
+    });
+    s.projects = projects;
+
     if (Array.isArray(raw.books)) {
-      var books = [];
-      var seenIds = {};
+      var books = [], seenIds = {};
       raw.books.slice(0, 50).forEach(function (b, i) {
         if (!b || typeof b !== 'object') return;
         var id = str(b.id, 40) || ('b' + (i + 1));
         while (seenIds[id]) id = id + '_';
         seenIds[id] = true;
-        books.push({ id: id, name: str(b.name, 40) || ('Book ' + (books.length + 1)), entries: uniqueEntries(b.entries) });
+        books.push({
+          id: id,
+          name: str(b.name, 40) || ('Book ' + (books.length + 1)),
+          projectId: pIds[b.projectId] ? b.projectId : '',
+          entries: uniqueEntries(b.entries)
+        });
       });
       if (books.length) {
         s.books = books;
@@ -103,7 +232,7 @@
     return s;
   }
 
-  /* --- PIN hashing (casual lock, not strong crypto) --- */
+  /* ---------- PIN hashing (casual lock, not strong crypto) ---------- */
   function cyrb53(text, seed) {
     var h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
     for (var i = 0, ch; i < text.length; i++) {
@@ -127,7 +256,7 @@
   }
   function validPin(pin) { return /^\d{4,8}$/.test(pin); }
 
-  /* --- CSV --- */
+  /* ---------- CSV ---------- */
   function csvCell(v) {
     var s = String(v == null ? '' : v);
     if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // neutralise spreadsheet formulas
@@ -140,12 +269,16 @@
     });
   }
 
-  function buildCsv(entries) {
-    var rows = [['Date', 'Type', 'Amount', 'Category', 'Remark']];
-    sortedForExport(entries).forEach(function (e) {
-      rows.push([e.date, e.type === 'in' ? 'Cash in' : 'Cash out', e.amount.toFixed(2), e.category, e.note]);
-    });
+  function rowsToCsv(rows) {
     return '﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n');
+  }
+
+  function buildCsv(entries) {
+    var rows = [['Date', 'Type', 'Amount', 'Category', 'Remark', 'Cost code', 'Payee']];
+    sortedForExport(entries).forEach(function (e) {
+      rows.push([e.date, e.type === 'in' ? 'Cash in' : 'Cash out', e.amount.toFixed(2), e.category, e.note, e.code, e.party]);
+    });
+    return rowsToCsv(rows);
   }
 
   function parseCsv(text) {
@@ -177,30 +310,33 @@
   /* Returns { entries: [...], skipped: n } */
   function entriesFromCsv(text) {
     var rows = parseCsv(text);
-    var idx = { date: 0, type: 1, amount: 2, category: 3, remark: 4 };
+    var idx = { date: 0, type: 1, amount: 2, category: 3, remark: 4, code: 5, payee: 6 };
     if (rows.length && /^date$/i.test(rows[0][0].trim())) {
       var head = rows.shift().map(function (h) { return h.trim().toLowerCase(); });
-      ['date', 'type', 'amount', 'category', 'remark'].forEach(function (k) {
-        var p = head.indexOf(k);
-        if (p >= 0) idx[k] = p;
+      var names = { date: 'date', type: 'type', amount: 'amount', category: 'category', remark: 'remark', code: 'cost code', payee: 'payee' };
+      Object.keys(names).forEach(function (k) {
+        var p = head.indexOf(names[k]);
+        idx[k] = p; // -1 when the column is absent
       });
     }
     var out = [], skipped = 0;
+    function cellAt(r, k) { return idx[k] >= 0 && r[idx[k]] != null ? r[idx[k]] : ''; }
     rows.forEach(function (r) {
-      var amount = parseFloat(String(r[idx.amount] || '').replace(/,/g, ''));
       var e = sanitizeEntry({
-        type: /out/i.test(r[idx.type] || '') ? 'out' : 'in',
-        amount: amount,
-        date: (r[idx.date] || '').trim(),
-        category: unquoteFormula(r[idx.category] || ''),
-        note: unquoteFormula(r[idx.remark] || '')
+        type: /out/i.test(cellAt(r, 'type')) ? 'out' : 'in',
+        amount: parseFloat(String(cellAt(r, 'amount')).replace(/,/g, '')),
+        date: cellAt(r, 'date').trim(),
+        category: unquoteFormula(cellAt(r, 'category')),
+        note: unquoteFormula(cellAt(r, 'remark')),
+        code: cellAt(r, 'code').trim().toLowerCase(),
+        party: unquoteFormula(cellAt(r, 'payee'))
       });
       if (e) out.push(e); else skipped++;
     });
     return { entries: uniqueEntries(out), skipped: skipped };
   }
 
-  /* --- totals, filters, reports --- */
+  /* ---------- totals, filters, reports ---------- */
   function totals(entries) {
     var i = 0, o = 0;
     entries.forEach(function (e) { if (e.type === 'in') i += e.amount; else o += e.amount; });
@@ -214,7 +350,7 @@
       if (f && f.type && f.type !== 'all' && e.type !== f.type) return false;
       if (f && f.from && e.date < f.from) return false;
       if (f && f.to && e.date > f.to) return false;
-      if (q && (e.category + ' ' + e.note).toLowerCase().indexOf(q) < 0) return false;
+      if (q && (e.category + ' ' + e.note + ' ' + e.party).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
   }
@@ -252,13 +388,161 @@
     return out;
   }
 
+  /* ---------- construction projects ---------- */
+  function sum(list, fn) {
+    var t = 0;
+    list.forEach(function (x) { t += fn(x); });
+    return round2(t);
+  }
+
+  function billPaid(bill) { return sum(bill.payments, function (p) { return p.amount; }); }
+  function billBalance(bill) { return round2(bill.amount - billPaid(bill)); }
+  function certReceived(cert) { return sum(cert.receipts, function (p) { return p.amount; }); }
+
+  /* Certificate arithmetic, shown to the user so they can check it against the contract:
+     payable = gross - retention - advance recovery + VAT - withholding */
+  function certCalc(project, cert) {
+    var retention = round2(cert.gross * project.retention / 100);
+    var vat = round2(cert.gross * project.vat / 100);
+    var wht = round2(cert.gross * project.wht / 100);
+    var payable = round2(cert.gross - retention - cert.advanceRecovery + vat - wht);
+    var received = certReceived(cert);
+    return {
+      gross: cert.gross, retention: retention, advanceRecovery: cert.advanceRecovery,
+      vat: vat, wht: wht, payable: payable, received: received, balance: round2(payable - received)
+    };
+  }
+
+  function projectBooks(state, projectId) {
+    return state.books.filter(function (b) { return b.projectId === projectId; });
+  }
+
+  /* Cost = all supplier bills + cash-out entries in linked books that do not pay a bill. */
+  function projectSummary(state, projectId) {
+    var p = null;
+    state.projects.forEach(function (x) { if (x.id === projectId) p = x; });
+    if (!p) return null;
+
+    var costByCode = {};
+    CODES.forEach(function (c) { costByCode[c] = 0; });
+    p.bills.forEach(function (b) { costByCode[b.code] = round2(costByCode[b.code] + b.amount); });
+    projectBooks(state, projectId).forEach(function (b) {
+      b.entries.forEach(function (e) {
+        if (e.type !== 'out' || e.billId) return;
+        var c = e.code || 'other';
+        costByCode[c] = round2(costByCode[c] + e.amount);
+      });
+    });
+
+    var costTotal = sum(CODES, function (c) { return costByCode[c]; });
+    var budgetTotal = sum(CODES, function (c) { return p.budgets[c] || 0; });
+    var billsTotal = sum(p.bills, function (b) { return b.amount; });
+    var billsPaid = sum(p.bills, function (b) { return billPaid(b); });
+    var calcs = p.certs.map(function (c) { return certCalc(p, c); });
+    var certified = sum(calcs, function (c) { return c.gross; });
+    var payableTotal = sum(calcs, function (c) { return c.payable; });
+    var receivedCerts = sum(calcs, function (c) { return c.received; });
+    var advanceRecovered = sum(calcs, function (c) { return c.advanceRecovery; });
+    var wagesUnpaid = sum(p.attendance, function (a) { return a.paid ? 0 : a.days * a.rate; });
+
+    return {
+      contractSum: p.contractSum,
+      certified: certified,
+      pctComplete: p.contractSum > 0 ? round2(certified / p.contractSum * 100) : 0,
+      retentionHeld: sum(calcs, function (c) { return c.retention; }),
+      advance: p.advance, advanceRecovered: advanceRecovered, advanceBalance: round2(p.advance - advanceRecovered),
+      payableTotal: payableTotal,
+      received: round2(p.advance + receivedCerts),
+      clientOutstanding: round2(payableTotal - receivedCerts),
+      costByCode: costByCode, costTotal: costTotal,
+      budgetTotal: budgetTotal, budgetRemaining: round2(budgetTotal - costTotal),
+      billsTotal: billsTotal, billsPaid: billsPaid, billsOutstanding: round2(billsTotal - billsPaid),
+      wagesUnpaid: wagesUnpaid,
+      owed: round2(billsTotal - billsPaid + wagesUnpaid),
+      margin: round2(certified - costTotal)
+    };
+  }
+
+  /* Outstanding amount per supplier across a project's bills (largest first). */
+  function supplierBalances(project) {
+    var map = {};
+    project.bills.forEach(function (b) {
+      var key = b.supplier || '';
+      map[key] = round2((map[key] || 0) + billBalance(b));
+    });
+    return Object.keys(map).map(function (k) { return { supplier: k, balance: map[k] }; })
+      .filter(function (x) { return x.balance > 0; })
+      .sort(function (a, b) { return b.balance - a.balance; });
+  }
+
+  /* Unpaid attendance in [from, to], grouped by worker. */
+  function payroll(project, from, to) {
+    var byWorker = {};
+    project.attendance.forEach(function (a) {
+      if (a.paid || a.days <= 0 || a.date < from || a.date > to) return;
+      var r = byWorker[a.workerId] || (byWorker[a.workerId] = { workerId: a.workerId, days: 0, amount: 0 });
+      r.days = round2(r.days + a.days);
+      r.amount = round2(r.amount + a.days * a.rate);
+    });
+    var rows = [];
+    project.workers.forEach(function (w) {
+      var r = byWorker[w.id];
+      if (r) rows.push({ workerId: w.id, name: w.name, days: r.days, amount: r.amount });
+    });
+    return { rows: rows, total: sum(rows, function (r) { return r.amount; }) };
+  }
+
+  function markPaid(project, from, to) {
+    var n = 0;
+    project.attendance.forEach(function (a) {
+      if (!a.paid && a.days > 0 && a.date >= from && a.date <= to) { a.paid = true; n++; }
+    });
+    return n;
+  }
+
+  /* Monday..Sunday week containing the given date. */
+  function weekRange(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00Z');
+    var dow = (d.getUTCDay() + 6) % 7; // Monday = 0
+    var start = new Date(d.getTime() - dow * 86400000);
+    var end = new Date(start.getTime() + 6 * 86400000);
+    return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
+  }
+
+  function projectReportCsv(state, projectId) {
+    var p = null;
+    state.projects.forEach(function (x) { if (x.id === projectId) p = x; });
+    var s = projectSummary(state, projectId);
+    if (!p || !s) return '';
+    var rows = [['Cost code', 'Budget', 'Actual', 'Remaining']];
+    CODES.forEach(function (c) {
+      var b = p.budgets[c] || 0;
+      rows.push([c, b.toFixed(2), s.costByCode[c].toFixed(2), round2(b - s.costByCode[c]).toFixed(2)]);
+    });
+    rows.push(['TOTAL', s.budgetTotal.toFixed(2), s.costTotal.toFixed(2), s.budgetRemaining.toFixed(2)]);
+    rows.push([]);
+    rows.push(['Contract sum', p.contractSum.toFixed(2)]);
+    rows.push(['Certified (gross)', s.certified.toFixed(2)]);
+    rows.push(['Received (incl. advance)', s.received.toFixed(2)]);
+    rows.push(['Due from client', s.clientOutstanding.toFixed(2)]);
+    rows.push(['Retention held', s.retentionHeld.toFixed(2)]);
+    rows.push(['Owed to suppliers and workers', s.owed.toFixed(2)]);
+    rows.push(['Certified minus cost', s.margin.toFixed(2)]);
+    return rowsToCsv(rows);
+  }
+
   return {
-    LANGS: LANGS, CURRENCIES: CURRENCIES, THEMES: THEMES,
-    newId: newId, todayStr: todayStr, isDate: isDate,
+    LANGS: LANGS, CURRENCIES: CURRENCIES, THEMES: THEMES, CODES: CODES,
+    newId: newId, todayStr: todayStr, isDate: isDate, round2: round2,
     sanitizeEntry: sanitizeEntry, sanitizeState: sanitizeState, defaultState: defaultState, migrateOld: migrateOld,
+    sanitizeProject: sanitizeProject, sanitizeBill: sanitizeBill, sanitizeCert: sanitizeCert,
+    sanitizeWorker: sanitizeWorker, sanitizeAttendance: sanitizeAttendance, sanitizePayment: sanitizePayment,
     hashPin: hashPin, newSalt: newSalt, validPin: validPin,
     buildCsv: buildCsv, parseCsv: parseCsv, entriesFromCsv: entriesFromCsv,
     totals: totals, filterEntries: filterEntries, monthOf: monthOf,
-    monthTotals: monthTotals, categoryTotals: categoryTotals, shiftMonth: shiftMonth, lastMonths: lastMonths
+    monthTotals: monthTotals, categoryTotals: categoryTotals, shiftMonth: shiftMonth, lastMonths: lastMonths,
+    billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
+    projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
+    payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv
   };
 });
