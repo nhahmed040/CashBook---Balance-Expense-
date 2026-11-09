@@ -4,11 +4,14 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.print.PrintAttributes;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.webkit.JsResult;
 import android.webkit.ValueCallback;
@@ -17,11 +20,13 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 /**
  * Hosts the CashBook web app (bundled from /web) inside a WebView.
@@ -30,8 +35,10 @@ import java.nio.charset.StandardCharsets;
 public class MainActivity extends Activity {
 
     private static final int REQ_PICK_FILE = 1001;
+    private static final int MAX_PHOTO_CHARS = 4000000;
 
     private WebView web;
+    private WebView printView; // kept so the print job's WebView is not garbage-collected
     private ValueCallback<Uri[]> filePathCallback;
 
     @Override
@@ -77,9 +84,15 @@ public class MainActivity extends Activity {
                 }
                 filePathCallback = callback;
                 try {
+                    // Photos ask for "image/*"; the restore/import pickers use file extensions, so any file.
+                    String type = "*/*";
+                    String[] accept = params == null ? null : params.getAcceptTypes();
+                    if (accept != null && accept.length > 0 && accept[0] != null && accept[0].startsWith("image/")) {
+                        type = accept[0];
+                    }
                     Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
+                    intent.setType(type);
                     startActivityForResult(Intent.createChooser(intent, null), REQ_PICK_FILE);
                 } catch (Exception e) {
                     filePathCallback = null;
@@ -111,7 +124,22 @@ public class MainActivity extends Activity {
         if (web != null) {
             web.destroy();
         }
+        if (printView != null) {
+            printView.destroy();
+        }
         super.onDestroy();
+    }
+
+    private File photoFile(String id) {
+        // Ids are plain numbers; anything else is refused so a page can never reach other files.
+        if (id == null || !id.matches("[0-9]{1,20}")) {
+            return null;
+        }
+        File dir = new File(getFilesDir(), "photos");
+        if (!dir.exists() && !dir.mkdirs()) {
+            return null;
+        }
+        return new File(dir, id + ".txt");
     }
 
     /** Exposed to the page as window.AndroidBridge. */
@@ -159,6 +187,75 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception e) {
                 return "";
+            }
+        }
+
+        /** Opens Android's print dialog for an HTML document (choose "Save as PDF" there). */
+        @android.webkit.JavascriptInterface
+        public void printHtml(final String title, final String html) {
+            runOnUiThread(() -> {
+                try {
+                    final String name = title == null || title.isEmpty() ? "CashBook" : title;
+                    if (printView != null) {
+                        printView.destroy();
+                    }
+                    final WebView wv = new WebView(MainActivity.this);
+                    wv.getSettings().setJavaScriptEnabled(false);
+                    final boolean[] started = {false};
+                    wv.setWebViewClient(new WebViewClient() {
+                        @Override
+                        public void onPageFinished(WebView view, String url) {
+                            if (started[0]) {
+                                return;
+                            }
+                            started[0] = true;
+                            PrintManager pm = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                            pm.print(name, view.createPrintDocumentAdapter(name), new PrintAttributes.Builder().build());
+                        }
+                    });
+                    printView = wv;
+                    wv.loadDataWithBaseURL(null, html == null ? "" : html, "text/html", "UTF-8", null);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Could not open the print dialog", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        /** Stores a photo (a JPEG data URL) in the app's private files. Returns true on success. */
+        @android.webkit.JavascriptInterface
+        public boolean photoPut(String id, String dataUrl) {
+            File f = photoFile(id);
+            if (f == null || dataUrl == null || dataUrl.length() > MAX_PHOTO_CHARS || !dataUrl.startsWith("data:image/")) {
+                return false;
+            }
+            try (FileOutputStream out = new FileOutputStream(f)) {
+                out.write(dataUrl.getBytes(StandardCharsets.UTF_8));
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        /** Returns the stored photo data URL, or "" if there is none. */
+        @android.webkit.JavascriptInterface
+        public String photoGet(String id) {
+            File f = photoFile(id);
+            if (f == null || !f.isFile()) {
+                return "";
+            }
+            try {
+                return new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        @android.webkit.JavascriptInterface
+        public void photoDelete(String id) {
+            File f = photoFile(id);
+            if (f != null && f.isFile()) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
             }
         }
     }

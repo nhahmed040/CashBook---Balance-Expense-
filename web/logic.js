@@ -35,6 +35,20 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
   function validId(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
+  function round3(n) { return Math.round(n * 1000) / 1000; }
+  function num3(v, min) {
+    var n = Number(v);
+    if (!isFinite(n) || n < min) n = min;
+    return round3(n);
+  }
+  /* List of photo ids: valid, unique, at most 12. */
+  function photoIds(list) {
+    var seen = {}, out = [];
+    (Array.isArray(list) ? list : []).forEach(function (v) {
+      if (validId(v) && !seen[v] && out.length < 12) { seen[v] = true; out.push(v); }
+    });
+    return out;
+  }
 
   /* Keep the first item for each id; give duplicates a fresh id. */
   function mapList(list, fn, max) {
@@ -64,7 +78,8 @@
       code: CODES.indexOf(e.code) >= 0 ? e.code : '',
       party: str(e.party, 60),
       billId: validId(e.billId) ? e.billId : 0,
-      certId: validId(e.certId) ? e.certId : 0
+      certId: validId(e.certId) ? e.certId : 0,
+      photos: photoIds(e.photos)
     };
   }
   function uniqueEntries(list) { return mapList(list, sanitizeEntry); }
@@ -94,7 +109,8 @@
       code: CODES.indexOf(b.code) >= 0 ? b.code : 'other',
       desc: str(b.desc, 80),
       amount: round2(a),
-      payments: mapList(b.payments, sanitizePayment, 500)
+      payments: mapList(b.payments, sanitizePayment, 500),
+      photos: photoIds(b.photos)
     };
   }
 
@@ -131,6 +147,21 @@
     };
   }
 
+  function sanitizeBoqItem(i) {
+    if (!i || typeof i !== 'object') return null;
+    var desc = str(i.desc, 120);
+    if (!desc) return null;
+    return {
+      id: validId(i.id) ? i.id : newId(),
+      no: str(i.no, 20),
+      desc: desc,
+      unit: str(i.unit, 12),
+      qty: num3(i.qty, 0),
+      rate: num(i.rate, 0),
+      done: num3(i.done, 0)
+    };
+  }
+
   function sanitizeProject(p, n) {
     p = p && typeof p === 'object' ? p : {};
     var budgets = {};
@@ -164,7 +195,9 @@
       bills: mapList(p.bills, sanitizeBill, 5000),
       certs: mapList(p.certs, sanitizeCert, 1000),
       workers: workers,
-      attendance: Object.keys(attMap).map(function (k) { return attMap[k]; })
+      attendance: Object.keys(attMap).map(function (k) { return attMap[k]; }),
+      boq: mapList(p.boq, sanitizeBoqItem, 3000),
+      photos: photoIds(p.photos)
     };
   }
 
@@ -444,6 +477,7 @@
     var receivedCerts = sum(calcs, function (c) { return c.received; });
     var advanceRecovered = sum(calcs, function (c) { return c.advanceRecovery; });
     var wagesUnpaid = sum(p.attendance, function (a) { return a.paid ? 0 : a.days * a.rate; });
+    var bq = boqSummary(p);
 
     return {
       contractSum: p.contractSum,
@@ -458,6 +492,7 @@
       budgetTotal: budgetTotal, budgetRemaining: round2(budgetTotal - costTotal),
       billsTotal: billsTotal, billsPaid: billsPaid, billsOutstanding: round2(billsTotal - billsPaid),
       wagesUnpaid: wagesUnpaid,
+      boqTotal: bq.total, boqEarned: bq.earned, physicalPct: bq.pct,
       owed: round2(billsTotal - billsPaid + wagesUnpaid),
       margin: round2(certified - costTotal)
     };
@@ -528,7 +563,88 @@
     rows.push(['Retention held', s.retentionHeld.toFixed(2)]);
     rows.push(['Owed to suppliers and workers', s.owed.toFixed(2)]);
     rows.push(['Certified minus cost', s.margin.toFixed(2)]);
+    if (s.boqTotal > 0) {
+      rows.push(['BoQ total', s.boqTotal.toFixed(2)]);
+      rows.push(['Value of work done (BoQ)', s.boqEarned.toFixed(2)]);
+      rows.push(['Physical progress %', String(s.physicalPct)]);
+    }
     return rowsToCsv(rows);
+  }
+
+  /* ---------- bill of quantities ---------- */
+  function itemAmount(i) { return round2(i.qty * i.rate); }
+  function itemEarned(i) { return round2(i.done * i.rate); }
+  function isHeading(i) { return !(i.qty > 0) && !(i.rate > 0); }
+
+  function boqSummary(project) {
+    var total = sum(project.boq, itemAmount), earned = sum(project.boq, itemEarned);
+    return {
+      total: total, earned: earned,
+      pct: total > 0 ? round2(earned / total * 100) : 0,
+      count: project.boq.filter(function (i) { return !isHeading(i); }).length
+    };
+  }
+
+  /* Gross value of work done that has not been certified yet. */
+  function proposeCertGross(project) {
+    var earned = boqSummary(project).earned;
+    var certified = sum(project.certs, function (c) { return c.gross; });
+    return Math.max(0, round2(earned - certified));
+  }
+
+  /* Total certified before this certificate and up to and including it (date, then id order). */
+  function certCumulative(project, certId) {
+    var list = project.certs.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+    var prev = 0, cum = null;
+    list.forEach(function (c) {
+      if (cum !== null) return;
+      if (c.id === certId) cum = round2(prev + c.gross); else prev = round2(prev + c.gross);
+    });
+    return { previous: prev, cumulative: cum === null ? prev : cum };
+  }
+
+  function boqCsv(project) {
+    var rows = [['No', 'Description', 'Unit', 'Qty', 'Rate', 'Amount', 'Done', 'Value done', 'Done %']];
+    project.boq.forEach(function (i) {
+      if (isHeading(i)) { rows.push([i.no, i.desc, '', '', '', '', '', '', '']); return; }
+      rows.push([i.no, i.desc, i.unit, String(i.qty), i.rate.toFixed(2), itemAmount(i).toFixed(2), String(i.done),
+        itemEarned(i).toFixed(2), i.qty > 0 ? String(round2(i.done / i.qty * 100)) : '']);
+    });
+    var s = boqSummary(project);
+    rows.push(['', 'TOTAL', '', '', '', s.total.toFixed(2), '', s.earned.toFixed(2), String(s.pct)]);
+    return rowsToCsv(rows);
+  }
+
+  /* Reads a bill of quantities from CSV. Returns { items: [...], skipped: n }.
+     With a header row, columns are found by name (No, Description, Unit, Qty, Rate, Done);
+     without one the order is No, Description, Unit, Qty, Rate. */
+  function boqFromCsv(text) {
+    var rows = parseCsv(text);
+    var idx = { no: 0, desc: 1, unit: 2, qty: 3, rate: 4, done: -1 };
+    if (rows.length && rows[0].some(function (c) { return /desc/i.test(c); })) {
+      var head = rows.shift();
+      idx = { no: -1, desc: -1, unit: -1, qty: -1, rate: -1, done: -1 };
+      head.forEach(function (h, pos) {
+        h = h.trim();
+        if (/done|executed/i.test(h)) { if (idx.done < 0) idx.done = pos; }
+        else if (/desc/i.test(h)) { if (idx.desc < 0) idx.desc = pos; }
+        else if (/^(qty|quantity)/i.test(h)) { if (idx.qty < 0) idx.qty = pos; }
+        else if (/rate|price/i.test(h)) { if (idx.rate < 0) idx.rate = pos; }
+        else if (/^(unit|uom)$/i.test(h)) { if (idx.unit < 0) idx.unit = pos; }
+        else if (/^(no\.?|item( no\.?)?|ref|code|s\/n)$/i.test(h)) { if (idx.no < 0) idx.no = pos; }
+      });
+    }
+    function cell(r, k) { return idx[k] >= 0 && r[idx[k]] != null ? r[idx[k]] : ''; }
+    function number(v) { return parseFloat(String(v).replace(/,/g, '')) || 0; }
+    var items = [], skipped = 0;
+    rows.forEach(function (r) {
+      var it = sanitizeBoqItem({
+        no: unquoteFormula(cell(r, 'no')), desc: unquoteFormula(cell(r, 'desc')), unit: unquoteFormula(cell(r, 'unit')),
+        qty: number(cell(r, 'qty')), rate: number(cell(r, 'rate')), done: number(cell(r, 'done'))
+      });
+      if (it) items.push(it); else skipped++;
+    });
+    return { items: mapList(items, function (x) { return x; }, 3000), skipped: skipped };
   }
 
   return {
@@ -543,6 +659,9 @@
     monthTotals: monthTotals, categoryTotals: categoryTotals, shiftMonth: shiftMonth, lastMonths: lastMonths,
     billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
-    payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv
+    payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
+    sanitizeBoqItem: sanitizeBoqItem, itemAmount: itemAmount, itemEarned: itemEarned, isHeading: isHeading,
+    boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
+    boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds
   };
 });

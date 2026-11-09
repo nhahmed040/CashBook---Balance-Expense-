@@ -4,7 +4,7 @@
   var L = window.CBLogic;
   var STORAGE_KEY = 'cashbook.data.v2'; // same key as 1.1: data is upgraded in place
   var OLD_KEY = 'cashbook.entries.v1';
-  var SECTIONS = ['overview', 'budget', 'bills', 'client', 'labour', 'books'];
+  var SECTIONS = ['overview', 'boq', 'budget', 'bills', 'client', 'labour', 'books'];
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -139,10 +139,176 @@
   }
   function safeName(s) { return String(s).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'book'; }
 
+  /* ---------- photos ---------- */
+  var photoCache = {};
+  function photoData(id) {
+    if (photoCache[id]) return Promise.resolve(photoCache[id]);
+    return window.CBPhotos.get(id).then(function (d) { if (d) photoCache[id] = d; return d; });
+  }
+  function newPhotoState(ids) { return { ids: (ids || []).slice(), added: [], removed: [] }; }
+  function deletePhotoIds(ids) {
+    (ids || []).forEach(function (id) { window.CBPhotos.del(id); delete photoCache[id]; });
+  }
+  function commitPhotos(st) { deletePhotoIds(st.removed); st.removed = []; st.added = []; }
+  function rollbackPhotos(st) { deletePhotoIds(st.added); st.added = []; st.removed = []; }
+  function entryPhotoIds(entries) {
+    var ids = [];
+    entries.forEach(function (e) { ids = ids.concat(e.photos || []); });
+    return ids;
+  }
+  function allPhotoIds() {
+    var ids = [];
+    state.books.forEach(function (b) { ids = ids.concat(entryPhotoIds(b.entries)); });
+    state.projects.forEach(function (p) {
+      ids = ids.concat(p.photos);
+      p.bills.forEach(function (b) { ids = ids.concat(b.photos); });
+    });
+    return ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+  }
+
+  function viewPhoto(id, onRemove) {
+    var img = $('photoImg');
+    img.removeAttribute('src');
+    $('photoMeta').textContent = '';
+    $('photoRemove').hidden = !onRemove;
+    $('photoRemove').onclick = function () { closeModal('photoView'); if (onRemove) onRemove(); };
+    photoData(id).then(function (d) {
+      if (d) img.src = d; else $('photoMeta').textContent = t('photo_missing');
+    });
+    openModal('photoView');
+  }
+  $('photoClose').addEventListener('click', function () { closeModal('photoView'); });
+  $('photoView').addEventListener('click', function (ev) { if (ev.target === this) closeModal('photoView'); });
+
+  function thumbButton(id, onClick) {
+    var b = el('button', 'thumb', '🖼️');
+    b.type = 'button';
+    b.setAttribute('aria-label', t('photos'));
+    photoData(id).then(function (d) {
+      if (!d) return;
+      var img = document.createElement('img');
+      img.alt = '';
+      img.src = d;
+      b.textContent = '';
+      b.appendChild(img);
+    });
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  /* Read-only strip of thumbnails; tapping one opens the viewer. */
+  function thumbsOnly(container, ids) {
+    if (!ids || !ids.length) return;
+    var strip = el('div', 'photostrip');
+    ids.forEach(function (id) { strip.appendChild(thumbButton(id, function () { viewPhoto(id, null); })); });
+    container.appendChild(strip);
+  }
+
+  /* Editable strip. st = { ids, added, removed }. With a `live` callback, changes apply at once
+     (and the callback receives the new id list); otherwise the owner commits or rolls back. */
+  function photoWidget(container, st, live, withLabel) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.hidden = true;
+
+    function removePhoto(id) {
+      if (!window.confirm(t('confirm_remove_photo'))) return;
+      st.ids = st.ids.filter(function (x) { return x !== id; });
+      var wasAdded = st.added.indexOf(id) >= 0;
+      if (wasAdded) {
+        st.added = st.added.filter(function (x) { return x !== id; });
+        deletePhotoIds([id]);
+      } else if (live) {
+        deletePhotoIds([id]);
+      } else {
+        st.removed.push(id);
+      }
+      if (live) live(st.ids);
+      render();
+    }
+
+    function render() {
+      container.textContent = '';
+      if (withLabel) container.appendChild(el('span', 'photolabel', t('photos')));
+      var strip = el('div', 'photostrip');
+      st.ids.forEach(function (id) {
+        strip.appendChild(thumbButton(id, function () { viewPhoto(id, function () { removePhoto(id); }); }));
+      });
+      if (st.ids.length < 12) strip.appendChild(btn('📷 ' + t('add_photo'), 'addphoto', function () { input.click(); }));
+      container.appendChild(strip);
+      container.appendChild(input);
+    }
+
+    input.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(input.files || [], 0, 12 - st.ids.length);
+      input.value = '';
+      var failed = false;
+      files.reduce(function (chain, file) {
+        return chain.then(function () {
+          return window.CBPhotos.fileToDataUrl(file).then(function (url) {
+            var id = L.newId();
+            return window.CBPhotos.put(id, url).then(function () {
+              photoCache[id] = url;
+              st.ids.push(id);
+              st.added.push(id);
+            });
+          }).catch(function () { failed = true; });
+        });
+      }, Promise.resolve()).then(function () {
+        if (failed) toast(t('photo_fail'));
+        if (live) live(st.ids);
+        render();
+      });
+    });
+
+    render();
+  }
+
+  /* ---------- printing ---------- */
+  function printDoc(title, html) {
+    if (window.AndroidBridge && typeof window.AndroidBridge.printHtml === 'function') {
+      window.AndroidBridge.printHtml(title, html);
+      return;
+    }
+    var f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    f.onload = function () {
+      try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { toast(t('print_failed')); }
+      setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 60000);
+    };
+    f.srcdoc = html;
+    document.body.appendChild(f);
+  }
+
+  function printCertificate(p, cert) {
+    var title = (t('cert_title') + ' ' + (cert.no || '')).trim();
+    printDoc(title, window.CBPrint.certificateHtml({
+      t: t, money: money, lang: state.settings.lang, project: p, cert: cert,
+      calc: L.certCalc(p, cert), seq: L.certCumulative(p, cert.id), boq: p.boq.length ? p.boq : null, date: L.todayStr(),
+      itemAmount: L.itemAmount, itemEarned: L.itemEarned, isHeading: L.isHeading
+    }));
+  }
+
+  function printStatement(p) {
+    var certs = p.certs.slice().sort(function (a, c) { return a.date < c.date ? -1 : a.date > c.date ? 1 : a.id - c.id; });
+    printDoc(t('statement_title') + ' – ' + p.name, window.CBPrint.statementHtml({
+      t: t, money: money, lang: state.settings.lang, project: p, summary: L.projectSummary(state, p.id),
+      codes: L.CODES, codeLabel: codeLabel, suppliers: L.supplierBalances(p), date: L.todayStr(),
+      certCalcs: certs.map(function (c) { return { cert: c, calc: L.certCalc(p, c) }; })
+    }));
+  }
+
   /* ---------- generic form dialog ---------- */
+  var formStates = [];
+  function rollbackForm() { formStates.forEach(rollbackPhotos); formStates = []; }
+
   /* opts: { title, fields:[{key,label,type,value,options,required,min,max,step,ph,text}], submitLabel,
              onSubmit(values) -> error string | null, onDelete() } */
   function openForm(opts) {
+    rollbackForm();
     $('formTitle').textContent = opts.title;
     $('formErr').textContent = '';
     $('formSubmit').textContent = opts.submitLabel || t('save');
@@ -151,6 +317,13 @@
     var inputs = {};
     (opts.fields || []).forEach(function (f) {
       if (f.type === 'note') { body.appendChild(el('p', 'note', f.text)); return; }
+      if (f.type === 'photos') {
+        var holder = el('div');
+        photoWidget(holder, f.state, null, true);
+        body.appendChild(holder);
+        formStates.push(f.state);
+        return;
+      }
       var label = el('label', 'field');
       label.appendChild(el('span', null, f.label));
       var input;
@@ -197,17 +370,19 @@
       if (missing) { $('formErr').textContent = t('required'); return; }
       var err = opts.onSubmit(values);
       if (err) { $('formErr').textContent = err; return; }
+      formStates.forEach(commitPhotos);
+      formStates = [];
       closeModal('formModal');
     };
     $('formDelete').onclick = function () {
-      if (opts.onDelete && opts.onDelete() !== false) closeModal('formModal');
+      if (opts.onDelete && opts.onDelete() !== false) { rollbackForm(); closeModal('formModal'); }
     };
     openModal('formModal');
     var first = body.querySelector('input,select');
     if (first && opts.focus !== false) setTimeout(function () { first.focus(); }, 60);
   }
-  $('formCancel').addEventListener('click', function () { closeModal('formModal'); });
-  $('formModal').addEventListener('click', function (ev) { if (ev.target === this) closeModal('formModal'); });
+  $('formCancel').addEventListener('click', function () { rollbackForm(); closeModal('formModal'); });
+  $('formModal').addEventListener('click', function (ev) { if (ev.target === this) { rollbackForm(); closeModal('formModal'); } });
 
   /* ---------- linking helpers (bill payments / certificate receipts <-> cash entries) ---------- */
   function unlinkEntryEverywhere(entryId) {
@@ -219,7 +394,9 @@
 
   function removeEntryFromBook(bookId, entryId) {
     var b = bookById(bookId);
-    if (b) b.entries = b.entries.filter(function (e) { return e.id !== entryId; });
+    if (!b) return;
+    b.entries.forEach(function (e) { if (e.id === entryId) deletePhotoIds(e.photos); });
+    b.entries = b.entries.filter(function (e) { return e.id !== entryId; });
   }
 
   function dropPaymentsOfBook(bookId) {
@@ -284,6 +461,7 @@
       if (e.code) bits.push(codeLabel(e.code));
       if (e.party) bits.push(e.party);
       if (e.note) bits.push(e.note);
+      if (e.photos && e.photos.length) bits.push('📷' + e.photos.length);
       meta.appendChild(el('div', 'detail', bits.join(' · ')));
       li.appendChild(meta);
       li.appendChild(el('span', 'amt ' + e.type, (e.type === 'in' ? '+' : '−') + money(e.amount)));
@@ -424,7 +602,7 @@
     root.appendChild(seg);
     var body = el('div', 'stack');
     root.appendChild(body);
-    ({ overview: secOverview, budget: secBudget, bills: secBills, client: secClient, labour: secLabour, books: secBooks })[ui.section](body, p);
+    ({ overview: secOverview, boq: secBoq, budget: secBudget, bills: secBills, client: secClient, labour: secLabour, books: secBooks })[ui.section](body, p);
   }
 
   function panel(title) {
@@ -445,6 +623,7 @@
     if (p.startDate || p.endDate) c.appendChild(kv(t('start_date') + ' – ' + t('end_date'), (p.startDate || '…') + ' → ' + (p.endDate || '…')));
     c.appendChild(kv(t('contract_sum'), money(s.contractSum)));
     c.appendChild(kv(t('certified'), money(s.certified) + ' (' + pct(s.pctComplete) + ' ' + t('pct_complete') + ')'));
+    if (s.boqTotal > 0) c.appendChild(kv(t('physical_pct'), pct(s.physicalPct)));
     c.appendChild(kv(t('received'), money(s.received)));
     c.appendChild(kv(t('due_from_client'), money(s.clientOutstanding), s.clientOutstanding > 0 ? 'pos' : ''));
     c.appendChild(kv(t('retention_held'), money(s.retentionHeld)));
@@ -465,7 +644,14 @@
     k.appendChild(el('p', 'note', t('cost_note')));
     body.appendChild(k);
 
+    var ph = panel(t('site_photos'));
+    var holder = el('div');
+    photoWidget(holder, newPhotoState(p.photos), function (ids) { p.photos = L.photoIds(ids); save(); }, false);
+    ph.appendChild(holder);
+    body.appendChild(ph);
+
     var row = el('div', 'btnrow');
+    row.appendChild(btn(t('print_statement'), '', function () { printStatement(p); }));
     row.appendChild(btn(t('edit_project'), '', function () { editProject(p); }));
     row.appendChild(btn(t('export_report'), '', function () {
       saveFile('cashbook-project-' + safeName(p.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.projectReportCsv(state, p.id));
@@ -474,11 +660,143 @@
     body.appendChild(btn(t('delete'), 'danger block', function () {
       if (!window.confirm(t('confirm_delete_project'))) return;
       state.books.forEach(function (b) { if (b.projectId === p.id) b.projectId = ''; });
+      deletePhotoIds(p.photos);
+      p.bills.forEach(function (b) { deletePhotoIds(b.photos); });
       state.projects = state.projects.filter(function (x) { return x.id !== p.id; });
       ui.projectId = '';
       save(); renderAll();
     }));
   }
+
+  /* --- bill of quantities --- */
+  var boqTarget = null;
+
+  function secBoq(body, p) {
+    var s = L.boqSummary(p);
+    var sm = L.projectSummary(state, p.id);
+    var differs = s.total > 0 && Math.abs(s.total - p.contractSum) >= 0.01;
+
+    var pn = panel(t('boq_title'));
+    pn.appendChild(kv(t('boq_total'), money(s.total)));
+    pn.appendChild(kv(t('work_value'), money(s.earned)));
+    pn.appendChild(kv(t('physical_pct'), pct(s.pct)));
+    pn.appendChild(budgetBar(s.earned, s.total || 1));
+    pn.appendChild(kv(t('certified'), money(sm.certified)));
+    if (differs && p.contractSum > 0) pn.appendChild(kv(t('boq_vs_contract'), money(L.round2(s.total - p.contractSum)), 'neg'));
+    body.appendChild(pn);
+
+    body.appendChild(btn(t('cert_from_progress'), 'primary block', function () {
+      var proposed = L.proposeCertGross(p);
+      if (s.total <= 0 || proposed <= 0) { toast(t('nothing_to_certify')); return; }
+      ui.section = 'client';
+      renderProjects();
+      editCert(p, null, { gross: proposed });
+    }));
+    var row = el('div', 'btnrow');
+    row.appendChild(btn(t('add_item'), '', function () { editBoqItem(p, null); }));
+    row.appendChild(btn(t('import_boq'), '', function () { boqTarget = p; $('boqFile').click(); }));
+    if (p.boq.length) row.appendChild(btn(t('export_boq'), '', function () {
+      saveFile('cashbook-boq-' + safeName(p.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.boqCsv(p));
+    }));
+    if (differs) row.appendChild(btn(t('set_contract_from_boq'), '', function () { p.contractSum = s.total; save(); renderAll(); }));
+    body.appendChild(row);
+    body.appendChild(el('p', 'note', t('boq_csv_note')));
+
+    if (!p.boq.length) { body.appendChild(el('p', 'empty', t('no_items'))); return; }
+    var list = panel(null);
+    p.boq.forEach(function (it) {
+      var label = (it.no ? it.no + '  ' : '') + it.desc;
+      if (L.isHeading(it)) {
+        var h = el('div', 'boqrow heading', label);
+        h.style.cursor = 'pointer';
+        h.addEventListener('click', function () { editBoqItem(p, it); });
+        list.appendChild(h);
+        return;
+      }
+      var r = el('div', 'boqrow');
+      var top = el('div', 'boqtop');
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', 'title', label));
+      meta.appendChild(el('div', 'detail', it.qty + ' ' + it.unit + ' × ' + money(it.rate) + ' = ' + money(L.itemAmount(it))));
+      top.appendChild(meta);
+      top.addEventListener('click', function () { editBoqItem(p, it); });
+      r.appendChild(top);
+
+      var dn = el('div', 'boqdone');
+      var inp = document.createElement('input');
+      inp.type = 'number'; inp.min = '0'; inp.step = 'any'; inp.inputMode = 'decimal'; inp.placeholder = '0';
+      inp.value = it.done || '';
+      inp.setAttribute('aria-label', it.desc + ' – ' + t('done_to_date'));
+      inp.addEventListener('change', function () {
+        var v = parseFloat(inp.value);
+        it.done = isFinite(v) && v > 0 ? Math.round(v * 1000) / 1000 : 0;
+        save(); renderProjects();
+      });
+      dn.appendChild(inp);
+      var ratio = it.qty > 0 ? it.done / it.qty : 0;
+      dn.appendChild(budgetBar(Math.min(it.done, it.qty), it.qty || 1));
+      dn.appendChild(el('small', null, pct(ratio * 100)));
+      r.appendChild(dn);
+      if (it.done > it.qty) r.appendChild(el('div', 'overqty', t('over_qty')));
+      if (it.done > 0) r.appendChild(el('div', 'detail', t('work_value') + ': ' + money(L.itemEarned(it))));
+      list.appendChild(r);
+    });
+    body.appendChild(list);
+  }
+
+  function editBoqItem(p, it) {
+    var isNew = !it;
+    var x = it || { no: '', desc: '', unit: '', qty: '', rate: '' };
+    openForm({
+      title: isNew ? t('add_item') : t('edit_item'),
+      fields: [
+        { key: 'no', label: t('item_no'), type: 'text', value: x.no, max: 20 },
+        { key: 'desc', label: t('item_desc'), type: 'text', value: x.desc, max: 120, required: true },
+        { key: 'unit', label: t('unit'), type: 'text', value: x.unit, max: 12 },
+        { key: 'qty', label: t('qty'), type: 'number', min: 0, value: x.qty || '' },
+        { key: 'rate', label: t('rate'), type: 'number', min: 0, value: x.rate || '' },
+        { type: 'note', text: t('heading_note') }
+      ],
+      onSubmit: function (v) {
+        if (isNew) {
+          var ni = L.sanitizeBoqItem({ no: v.no, desc: v.desc, unit: v.unit, qty: v.qty, rate: v.rate });
+          if (!ni) return t('required');
+          p.boq.push(ni);
+        } else {
+          it.no = v.no.slice(0, 20); it.desc = v.desc.slice(0, 120); it.unit = v.unit.slice(0, 12);
+          it.qty = Math.max(0, Math.round(v.qty * 1000) / 1000); it.rate = Math.max(0, L.round2(v.rate));
+        }
+        save(); renderAll();
+        return null;
+      },
+      onDelete: isNew ? null : function () {
+        if (!window.confirm(t('confirm_delete_item'))) return false;
+        p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
+        save(); renderAll();
+        return true;
+      }
+    });
+  }
+
+  $('boqFile').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    var input = this;
+    var p = boqTarget;
+    if (!file || !p) { input.value = ''; return; }
+    var reader = new FileReader();
+    reader.onerror = function () { toast(t('restore_fail')); input.value = ''; };
+    reader.onload = function () {
+      input.value = '';
+      var res = L.boqFromCsv(String(reader.result || ''));
+      if (!res.items.length) { toast(t('restore_fail')); return; }
+      if (!window.confirm(t('boq_import_confirm', { n: res.items.length }))) return;
+      res.items.forEach(function (i) { i.id = L.newId(); p.boq.push(i); });
+      p.boq = p.boq.slice(0, 3000);
+      save(); renderAll();
+      toast(t('restored') + (res.skipped ? ' (' + res.skipped + ' ' + t('skipped') + ')' : ''));
+    };
+    reader.readAsText(file);
+  });
 
   /* --- budget --- */
   function secBudget(body, p) {
@@ -584,6 +902,7 @@
       card.appendChild(el('h3', null, (bill.supplier || t('uncategorized')) + (bill.desc ? ' – ' + bill.desc : '')));
       card.appendChild(el('div', 'muted small', bill.date + ' · ' + codeLabel(bill.code)));
       card.appendChild(kv(t('bill_amount'), money(bill.amount)));
+      thumbsOnly(card, bill.photos);
       card.appendChild(kv(t('paid'), money(L.billPaid(bill))));
       var bal = L.billBalance(bill);
       card.appendChild(kv(t('balance_due'), money(bal), bal > 0 ? 'neg' : 'pos'));
@@ -613,6 +932,7 @@
   function editBill(p, bill) {
     var isNew = !bill;
     var b = bill || { date: L.todayStr(), supplier: '', code: 'materials', desc: '', amount: '' };
+    var pst = newPhotoState(bill ? bill.photos : []);
     openForm({
       title: isNew ? t('add_bill') : t('edit_bill'),
       fields: [
@@ -620,23 +940,26 @@
         { key: 'supplier', label: t('supplier'), type: 'text', value: b.supplier, required: true },
         { key: 'code', label: t('cost_code'), type: 'select', options: codeOptions(), value: b.code },
         { key: 'desc', label: t('description'), type: 'text', value: b.desc, max: 80 },
-        { key: 'amount', label: t('bill_amount'), type: 'number', min: 0.01, value: b.amount, required: true }
+        { key: 'amount', label: t('bill_amount'), type: 'number', min: 0.01, value: b.amount, required: true },
+        { key: 'photos', type: 'photos', state: pst }
       ],
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
         if (isNew) {
-          var nb = L.sanitizeBill({ date: date, supplier: v.supplier, code: v.code, desc: v.desc, amount: v.amount });
+          var nb = L.sanitizeBill({ date: date, supplier: v.supplier, code: v.code, desc: v.desc, amount: v.amount, photos: pst.ids });
           if (!nb) return t('required');
           p.bills.push(nb);
         } else {
           bill.date = date; bill.supplier = v.supplier.slice(0, 60); bill.code = v.code; bill.desc = v.desc.slice(0, 80);
           bill.amount = L.round2(v.amount);
+          bill.photos = L.photoIds(pst.ids);
         }
         save(); renderAll();
         return null;
       },
       onDelete: isNew ? null : function () {
         if (!window.confirm(t('confirm_delete_bill'))) return false;
+        deletePhotoIds(bill.photos);
         clearEntryLinks('billId', bill.id);
         p.bills = p.bills.filter(function (x) { return x.id !== bill.id; });
         save(); renderAll();
@@ -716,15 +1039,16 @@
       });
       var row = el('div', 'btnrow');
       if (c.balance > 0) row.appendChild(btn(t('receive'), 'primary', function () { receiveCert(p, cert); }));
+      row.appendChild(btn(t('print'), '', function () { printCertificate(p, cert); }));
       row.appendChild(btn(t('edit_cert'), '', function () { editCert(p, cert); }));
       card.appendChild(row);
       body.appendChild(card);
     });
   }
 
-  function editCert(p, cert) {
+  function editCert(p, cert, preset) {
     var isNew = !cert;
-    var c = cert || { no: 'IPC-' + (p.certs.length + 1), date: L.todayStr(), gross: '', advanceRecovery: '' };
+    var c = cert || { no: 'IPC-' + (p.certs.length + 1), date: L.todayStr(), gross: preset ? preset.gross : '', advanceRecovery: '' };
     openForm({
       title: isNew ? t('add_cert') : t('edit_cert'),
       fields: [
@@ -975,6 +1299,7 @@
 
   /* ---------- entry add / edit ---------- */
   var editingEntry = null;
+  var entryPhotoSt = newPhotoState([]);
 
   function entryLinkOptions(project, type, current) {
     var opts = [option('', t('none_opt'))];
@@ -1019,6 +1344,8 @@
       if (!e) return;
     }
     editingEntry = e;
+    entryPhotoSt = newPhotoState(e ? e.photos : []);
+    photoWidget($('entryPhotos'), entryPhotoSt, null, true);
     $('entryTitle').textContent = e ? t('edit_entry') : t('add_entry');
     $('entryForm').elements.type.value = e ? e.type : 'in';
     $('amount').value = e ? e.amount : '';
@@ -1058,14 +1385,14 @@
     if (ui.view === 'projects') {
       var p = currentProject();
       if (!p) { newProject(); return; }
-      ({ overview: function () { editProject(p); }, budget: function () { editBudget(p); }, bills: function () { editBill(p, null); },
+      ({ overview: function () { editProject(p); }, boq: function () { editBoqItem(p, null); }, budget: function () { editBudget(p); }, bills: function () { editBill(p, null); },
          client: function () { editCert(p, null); }, labour: function () { editWorker(p, null); }, books: function () { linkBookForm(p); } })[ui.section]();
       return;
     }
     openEntry(null);
   });
-  $('cancelEntry').addEventListener('click', function () { closeModal('entryModal'); });
-  $('entryModal').addEventListener('click', function (ev) { if (ev.target === this) closeModal('entryModal'); });
+  $('cancelEntry').addEventListener('click', function () { rollbackPhotos(entryPhotoSt); closeModal('entryModal'); });
+  $('entryModal').addEventListener('click', function (ev) { if (ev.target === this) { rollbackPhotos(entryPhotoSt); closeModal('entryModal'); } });
   Array.prototype.forEach.call(document.querySelectorAll('#entryForm input[name=type]'), function (r) {
     r.addEventListener('change', refreshEntryLinks);
   });
@@ -1118,7 +1445,7 @@
       date: $('date').value,
       category: $('category').value,
       note: $('note').value,
-      code: code, party: party, billId: billId, certId: certId
+      code: code, party: party, billId: billId, certId: certId, photos: entryPhotoSt.ids
     });
     if (!draft) return;
 
@@ -1138,6 +1465,7 @@
       else if (cert && pay) cert.receipts.push(pay);
       else { draft.billId = 0; draft.certId = 0; }
     }
+    commitPhotos(entryPhotoSt);
     save();
     closeModal('entryModal');
     renderAll();
@@ -1147,6 +1475,8 @@
     if (!ui.editingId || !window.confirm(t('confirm_delete'))) return;
     var b = book();
     unlinkEntryEverywhere(ui.editingId);
+    deletePhotoIds(entryPhotoSt.ids.concat(entryPhotoSt.removed));
+    entryPhotoSt = newPhotoState([]);
     b.entries = b.entries.filter(function (x) { return x.id !== ui.editingId; });
     save();
     closeModal('entryModal');
@@ -1229,6 +1559,7 @@
     if (!window.confirm(t('confirm_delete_book'))) return;
     var cur = book().id;
     dropPaymentsOfBook(cur);
+    deletePhotoIds(entryPhotoIds(book().entries));
     state.books = state.books.filter(function (b) { return b.id !== cur; });
     state.current = state.books[0].id;
     save();
@@ -1244,6 +1575,7 @@
   $('clearBtn').addEventListener('click', function () {
     if (!window.confirm(t('confirm_clear'))) return;
     dropPaymentsOfBook(book().id);
+    deletePhotoIds(entryPhotoIds(book().entries));
     book().entries = [];
     save();
     renderAll();
@@ -1326,6 +1658,33 @@
     saveFile('cashbook-backup-' + L.todayStr() + '.json', 'application/json', JSON.stringify(copy, null, 2));
   });
 
+  $('backupPhotosBtn').addEventListener('click', function () {
+    var ids = allPhotoIds();
+    if (!ids.length) { toast(t('photos_none')); return; }
+    Promise.all(ids.map(function (id) { return photoData(id).then(function (d) { return [id, d]; }); })).then(function (pairs) {
+      var photos = {}, n = 0;
+      pairs.forEach(function (x) { if (x[1]) { photos[x[0]] = x[1]; n++; } });
+      if (!n) { toast(t('photos_none')); return; }
+      saveFile('cashbook-photos-' + L.todayStr() + '.json', 'application/json', JSON.stringify({ cashbookPhotos: 1, photos: photos }));
+    });
+  });
+
+  function restorePhotos(parsed) {
+    var ids = Object.keys(parsed.photos || {}).filter(function (id) {
+      var d = parsed.photos[id];
+      return /^\d{1,16}$/.test(id) && typeof d === 'string' && d.indexOf('data:image/') === 0 && d.length < 4000000;
+    });
+    var n = 0;
+    ids.reduce(function (chain, id) {
+      return chain.then(function () {
+        return window.CBPhotos.put(id, parsed.photos[id]).then(function () { photoCache[Number(id)] = parsed.photos[id]; n++; }).catch(function () { /* skip */ });
+      });
+    }, Promise.resolve()).then(function () {
+      renderAll();
+      toast(n ? t('photos_restored', { n: n }) : t('restore_fail'));
+    });
+  }
+
   $('restoreBtn').addEventListener('click', function () { $('restoreFile').click(); });
 
   $('restoreFile').addEventListener('change', function () {
@@ -1340,6 +1699,7 @@
       try {
         if (/^\s*\{/.test(text.replace(/^﻿/, ''))) {
           var parsed = JSON.parse(text);
+          if (parsed && parsed.cashbookPhotos) { restorePhotos(parsed); return; }
           if (!parsed || !Array.isArray(parsed.books)) throw new Error('not a backup');
           if (!window.confirm(t('restore_confirm'))) return;
           var next = L.sanitizeState(parsed, { keepPin: false });

@@ -117,11 +117,14 @@
       <div class="panel">
         <h2 data-i18n="data">Data</h2>
         <button type="button" id="backupBtn" class="block" data-i18n="backup">Backup all data</button>
+        <button type="button" id="backupPhotosBtn" class="block" data-i18n="backup_photos">Backup photos</button>
         <button type="button" id="restoreBtn" class="block" data-i18n="restore">Restore from file</button>
+        <input type="file" id="boqFile" accept=".csv,text/csv,text/plain" hidden>
         <input type="file" id="restoreFile" accept=".json,.csv,application/json,text/csv,text/plain" hidden>
         <button type="button" id="exportBtn" class="block" data-i18n="export_csv">Export this book (CSV)</button>
         <button type="button" id="clearBtn" class="block danger" data-i18n="clear_book">Clear this book</button>
         <p class="muted small" data-i18n="about_note">Data stays on this device. Back it up regularly.</p>
+        <p class="muted small" data-i18n="photos_note">Photos are stored on this device and are not inside the normal backup. Back them up here.</p>
       </div>
     </section>
   </main>
@@ -148,6 +151,7 @@
       <input type="text" id="category" list="catList" data-i18n-ph="category" placeholder="Category" maxlength="40">
       <datalist id="catList"></datalist>
       <input type="text" id="note" data-i18n-ph="remark" placeholder="Remark (optional)" maxlength="80">
+      <div id="entryPhotos"></div>
       <div id="entryProject" class="stack" hidden>
         <label class="field"><span data-i18n="cost_code">Cost code</span><select id="codeSel"></select></label>
         <input type="text" id="party" list="partyList" data-i18n-ph="payee" placeholder="Payee / supplier" maxlength="60">
@@ -203,11 +207,26 @@
     </form>
   </div>
 
+  <!-- Photo viewer -->
+  <div id="photoView" class="overlay viewer">
+    <div class="viewbox">
+      <img id="photoImg" alt="">
+      <p id="photoMeta" class="muted small"></p>
+      <div class="row">
+        <button type="button" id="photoRemove" class="danger" data-i18n="remove_photo">Remove photo</button>
+        <button type="button" id="photoClose" class="primary" data-i18n="close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status"></div>
 
   <script src="logic.js"></script>
   <script src="i18n.js"></script>
   <script src="i18n-projects.js"></script>
+  <script src="i18n-more.js"></script>
+  <script src="print.js"></script>
+  <script src="photos.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

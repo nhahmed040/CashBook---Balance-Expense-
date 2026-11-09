@@ -193,3 +193,24 @@ body.view-settings .fab, body.view-reports .fab { display: none; }
 .paidmark { color: var(--in); font-weight: 700; }
 .note { color: var(--muted); font-size: .88rem; margin: 0; }
 .panel h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+
+/* ---- photos, BoQ ---- */
+.photostrip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.photostrip .thumb { width: 64px; height: 64px; padding: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+.photostrip .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photostrip .addphoto { height: 64px; padding: 0 14px; }
+.photolabel { font-size: .85rem; color: var(--muted); margin-bottom: 4px; display: block; }
+.viewer { z-index: 35; align-items: center; background: rgba(0, 0, 0, .88); }
+.viewbox { width: 100%; max-width: 560px; max-height: 96vh; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.viewbox img { max-width: 100%; max-height: 72vh; object-fit: contain; border-radius: 8px; align-self: center; background: #000; }
+.viewbox .muted { color: #cbd3df; text-align: center; }
+.boqrow { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); }
+.boqrow:first-of-type { border-top: 0; }
+.boqrow.heading { font-weight: 700; background: var(--bg); margin: 0 -14px; padding: 8px 14px; }
+.boqtop { display: flex; justify-content: space-between; gap: 10px; cursor: pointer; }
+.boqtop .title { font-weight: 600; overflow-wrap: anywhere; }
+.boqdone { display: flex; align-items: center; gap: 8px; }
+.boqdone input { width: 96px; text-align: center; }
+.boqdone .bar { flex: 1; }
+.boqdone small { min-width: 44px; text-align: right; color: var(--muted); }
+.overqty { color: var(--out); font-size: .8rem; }
