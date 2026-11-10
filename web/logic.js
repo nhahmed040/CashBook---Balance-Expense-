@@ -8,6 +8,7 @@
   var LANGS = ['en', 'om', 'am'];
   var CURRENCIES = ['ETB', 'USD', 'EUR', 'GBP', 'KES', 'SAR', 'AED', 'none'];
   var THEMES = ['system', 'light', 'dark'];
+  var CALENDARS = ['gregorian', 'ethiopian'];
   var CODES = ['materials', 'labour', 'equipment', 'subcontract', 'transport', 'fuel', 'permits', 'overhead', 'other'];
 
   var idCounter = 0;
@@ -206,7 +207,7 @@
     return {
       v: 3,
       current: 'main',
-      settings: { lang: 'en', currency: 'ETB', theme: 'system', pinHash: '', pinSalt: '' },
+      settings: { lang: 'en', currency: 'ETB', theme: 'system', calendar: 'gregorian', pinHash: '', pinSalt: '' },
       books: [{ id: 'main', name: 'Main', projectId: '', entries: [] }],
       projects: []
     };
@@ -222,6 +223,7 @@
     if (LANGS.indexOf(rs.lang) >= 0) s.settings.lang = rs.lang;
     if (CURRENCIES.indexOf(rs.currency) >= 0) s.settings.currency = rs.currency;
     if (THEMES.indexOf(rs.theme) >= 0) s.settings.theme = rs.theme;
+    if (CALENDARS.indexOf(rs.calendar) >= 0) s.settings.calendar = rs.calendar;
     if (keepPin && typeof rs.pinHash === 'string' && typeof rs.pinSalt === 'string' && rs.pinHash && rs.pinSalt) {
       s.settings.pinHash = rs.pinHash.slice(0, 64);
       s.settings.pinSalt = rs.pinSalt.slice(0, 64);
@@ -390,14 +392,19 @@
 
   function monthOf(date) { return date.slice(0, 7); }
 
-  function monthTotals(entries, month) {
-    return totals(entries.filter(function (e) { return monthOf(e.date) === month; }));
+  /* The month functions take an optional calendar (see calendar.js); months are keys like "2026-11". */
+  function keyFn(cal) { return cal ? cal.monthKey : monthOf; }
+
+  function monthTotals(entries, month, cal) {
+    var key = keyFn(cal);
+    return totals(entries.filter(function (e) { return key(e.date) === month; }));
   }
 
-  function categoryTotals(entries, month, type) {
+  function categoryTotals(entries, month, type, cal) {
     var map = {};
+    var key = keyFn(cal);
     entries.forEach(function (e) {
-      if (e.type !== type || monthOf(e.date) !== month) return;
+      if (e.type !== type || key(e.date) !== month) return;
       map[e.category] = round2((map[e.category] || 0) + e.amount);
     });
     return Object.keys(map).map(function (k) { return { name: k, total: map[k] }; })
@@ -411,11 +418,12 @@
     return y + '-' + String(m + 1).padStart(2, '0');
   }
 
-  function lastMonths(entries, endMonth, n) {
+  function lastMonths(entries, endMonth, n, cal) {
     var out = [];
+    var shift = cal ? cal.shiftMonth : shiftMonth;
     for (var k = n - 1; k >= 0; k--) {
-      var m = shiftMonth(endMonth, -k);
-      var t = monthTotals(entries, m);
+      var m = shift(endMonth, -k);
+      var t = monthTotals(entries, m, cal);
       out.push({ month: m, cashIn: t.cashIn, cashOut: t.cashOut });
     }
     return out;
@@ -648,7 +656,7 @@
   }
 
   return {
-    LANGS: LANGS, CURRENCIES: CURRENCIES, THEMES: THEMES, CODES: CODES,
+    LANGS: LANGS, CURRENCIES: CURRENCIES, THEMES: THEMES, CALENDARS: CALENDARS, CODES: CODES,
     newId: newId, todayStr: todayStr, isDate: isDate, round2: round2,
     sanitizeEntry: sanitizeEntry, sanitizeState: sanitizeState, defaultState: defaultState, migrateOld: migrateOld,
     sanitizeProject: sanitizeProject, sanitizeBill: sanitizeBill, sanitizeCert: sanitizeCert,

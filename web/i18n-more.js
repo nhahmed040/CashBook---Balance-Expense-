@@ -58,6 +58,15 @@
       photos_restored: '{n} ፎቶዎች ተመልሰዋል', photos_note: 'ፎቶዎች በዚህ መሣሪያ ላይ ይቀመጣሉ፤ በተለመደው ምትኬ ውስጥ የሉም። እዚህ ምትኬ ያስቀምጡ።'
     }
   };
+  var cal = {
+    en: { calendar: 'Calendar', cal_gregorian: 'Gregorian', cal_ethiopian: 'Ethiopian (E.C.)', day: 'Day', month: 'Month', year: 'Year',
+          cal_note: 'Dates are stored in the Gregorian calendar and exports (CSV) stay Gregorian. This setting changes how dates are shown, picked and grouped into months.' },
+    om: { calendar: 'Kaaleendarii', cal_gregorian: 'Gregorian', cal_ethiopian: 'Itiyoophiyaa (E.C.)', day: 'Guyyaa', month: 'Ji\'a', year: 'Waggaa',
+          cal_note: 'Guyyaaleen Gregorian jedhamuun kuufamu; baasii (CSV) Gregorian ta\'ee hafa. Filannoon kun akkaataa guyyaan itti mul\'atu, filatamu fi ji\'aan itti qooddamu jijjiira.' },
+    am: { calendar: 'ቀን መቁጠሪያ', cal_gregorian: 'ግሪጎሪያን', cal_ethiopian: 'ኢትዮጵያዊ (ዓ.ም.)', day: 'ቀን', month: 'ወር', year: 'ዓመት',
+          cal_note: 'ቀኖች በግሪጎሪያን ይቀመጣሉ፤ ወደ CSV የሚላኩትም በግሪጎሪያን ይቆያሉ። ይህ ቅንብር ቀኖች እንዴት እንደሚታዩ፣ እንደሚመረጡና በወራት እንደሚሰባሰቡ ብቻ ይለውጣል።' }
+  };
+  Object.keys(cal).forEach(function (l) { Object.keys(cal[l]).forEach(function (k) { add[l][k] = cal[l][k]; }); });
   Object.keys(add).forEach(function (lang) {
     var d = window.CB_I18N[lang] || (window.CB_I18N[lang] = {});
     Object.keys(add[lang]).forEach(function (k) { d[k] = add[lang][k]; });

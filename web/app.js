@@ -7,13 +7,14 @@
   var SECTIONS = ['overview', 'boq', 'budget', 'bills', 'client', 'labour', 'books'];
 
   var $ = function (id) { return document.getElementById(id); };
+  var CAL = window.CBCal;
 
   /* ---------- state ---------- */
   var state = loadState();
   var ui = {
     view: 'entries',
     q: '', type: 'all', from: '', to: '',
-    month: L.monthOf(L.todayStr()),
+    month: CAL.get(state.settings.calendar).monthKey(L.todayStr()),
     editingId: null,
     projectId: '', section: 'overview',
     labourDate: L.todayStr()
@@ -93,6 +94,101 @@
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   }
   if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', applyTheme);
+
+  /* ---------- calendar ---------- */
+  function cal() { return CAL.get(state.settings.calendar); }
+  /* Dates are stored as Gregorian ISO strings; this only changes how they are shown.
+     suffix = true adds "E.C." (printed documents). */
+  function fmtDate(iso, suffix) {
+    if (!iso) return '';
+    return cal().formatDate(iso, state.settings.lang, suffix ? { suffix: true } : undefined);
+  }
+
+  var nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+
+  function dropDate(input) {
+    if (input._ethW) {
+      if (input._ethW.parentNode) input._ethW.parentNode.removeChild(input._ethW);
+      input._ethW = null;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'value')) delete input.value; // back to the native property
+    input.classList.remove('vh');
+  }
+
+  /* In Ethiopian mode a date input is kept (hidden) as the data holder and three selects
+     (day, month, year) are shown instead. Setting input.value from code keeps them in step. */
+  function makeDate(input, optional) {
+    dropDate(input);
+    var C = cal();
+    if (C.id !== 'ethiopian') return;
+    var lang = state.settings.lang;
+    var wrap = el('div', 'ethdate');
+    var dSel = document.createElement('select'), mSel = document.createElement('select'), ySel = document.createElement('select');
+    dSel.setAttribute('aria-label', t('day'));
+    mSel.setAttribute('aria-label', t('month'));
+    ySel.setAttribute('aria-label', t('year'));
+    wrap.appendChild(dSel); wrap.appendChild(mSel); wrap.appendChild(ySel);
+    input.parentNode.insertBefore(wrap, input.nextSibling);
+    input._ethW = wrap;
+    input.classList.add('vh');
+    var thisYear = C.parts(L.todayStr()).y;
+
+    function fillDays(y, m) {
+      var keep = dSel.value;
+      dSel.textContent = '';
+      if (optional) dSel.appendChild(option('', '—'));
+      var n = y && m ? C.daysInMonth(y, m) : (m === 13 ? 5 : 30);
+      for (var d = 1; d <= n; d++) dSel.appendChild(option(String(d), String(d)));
+      if (keep && +keep > n) keep = String(n); // e.g. Pagume 6 -> 5 in a non-leap year
+      dSel.value = keep || (optional ? '' : '1');
+    }
+
+    function sync() {
+      var p = C.parts(nativeValue.get.call(input));
+      var yearFrom = Math.min(thisYear - 12, p ? p.y : thisYear), yearTo = Math.max(thisYear + 8, p ? p.y : thisYear);
+      mSel.textContent = ''; ySel.textContent = '';
+      if (optional) { mSel.appendChild(option('', '—')); ySel.appendChild(option('', '—')); }
+      for (var m = 1; m <= 13; m++) mSel.appendChild(option(String(m), C.monthName(m, lang)));
+      for (var y = yearFrom; y <= yearTo; y++) ySel.appendChild(option(String(y), String(y)));
+      if (p) {
+        mSel.value = String(p.m); ySel.value = String(p.y);
+        dSel.textContent = '';
+        fillDays(p.y, p.m);
+        dSel.value = String(p.d);
+      } else if (optional) {
+        mSel.value = ''; ySel.value = '';
+        dSel.textContent = '';
+        fillDays(0, 0);
+      } else {
+        // a required date is never left empty: start from today
+        nativeValue.set.call(input, L.todayStr());
+        sync();
+      }
+    }
+
+    function write() {
+      var y = +ySel.value, m = +mSel.value, d = +dSel.value;
+      nativeValue.set.call(input, y && m && d ? C.fromParts(y, m, d) : '');
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    mSel.addEventListener('change', function () { fillDays(+ySel.value, +mSel.value); write(); });
+    ySel.addEventListener('change', function () { fillDays(+ySel.value, +mSel.value); write(); });
+    dSel.addEventListener('change', write);
+
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: function () { return nativeValue.get.call(input); },
+      set: function (v) { nativeValue.set.call(input, v); sync(); }
+    });
+    sync();
+  }
+
+  function enhanceStaticDates() {
+    makeDate($('date'), false);
+    makeDate($('fromDate'), true);
+    makeDate($('toDate'), true);
+  }
 
   /* ---------- small helpers ---------- */
   var toastTimer = null;
@@ -288,6 +384,7 @@
     printDoc(title, window.CBPrint.certificateHtml({
       t: t, money: money, lang: state.settings.lang, project: p, cert: cert,
       calc: L.certCalc(p, cert), seq: L.certCumulative(p, cert.id), boq: p.boq.length ? p.boq : null, date: L.todayStr(),
+      fmt: function (d) { return fmtDate(d, true); },
       itemAmount: L.itemAmount, itemEarned: L.itemEarned, isHeading: L.isHeading
     }));
   }
@@ -297,6 +394,7 @@
     printDoc(t('statement_title') + ' – ' + p.name, window.CBPrint.statementHtml({
       t: t, money: money, lang: state.settings.lang, project: p, summary: L.projectSummary(state, p.id),
       codes: L.CODES, codeLabel: codeLabel, suppliers: L.supplierBalances(p), date: L.todayStr(),
+      fmt: function (d) { return fmtDate(d, true); },
       certCalcs: certs.map(function (c) { return { cert: c, calc: L.certCalc(p, c) }; })
     }));
   }
@@ -347,6 +445,7 @@
       }
       inputs[f.key] = { input: input, field: f };
       label.appendChild(input);
+      if (f.type === 'date') makeDate(input, !f.required);
       body.appendChild(label);
     });
     $('formDelete').hidden = !opts.onDelete;
@@ -457,7 +556,7 @@
       li.setAttribute('role', 'button');
       var meta = el('div', 'meta');
       meta.appendChild(el('div', 'title', e.category || (e.type === 'in' ? t('cash_in') : t('cash_out'))));
-      var bits = [e.date];
+      var bits = [fmtDate(e.date)];
       if (e.code) bits.push(codeLabel(e.code));
       if (e.party) bits.push(e.party);
       if (e.note) bits.push(e.note);
@@ -504,15 +603,15 @@
 
   function renderReports() {
     var entries = book().entries;
-    $('monthLabel').textContent = ui.month;
-    var m = L.monthTotals(entries, ui.month);
+    $('monthLabel').textContent = cal().monthLabel(ui.month, state.settings.lang);
+    var m = L.monthTotals(entries, ui.month, cal());
     $('mIn').textContent = money(m.cashIn);
     $('mOut').textContent = money(m.cashOut);
     $('mNet').textContent = money(m.balance);
-    renderBars($('catOut'), L.categoryTotals(entries, ui.month, 'out'), 'out');
-    renderBars($('catIn'), L.categoryTotals(entries, ui.month, 'in'), 'in');
+    renderBars($('catOut'), L.categoryTotals(entries, ui.month, 'out', cal()), 'out');
+    renderBars($('catIn'), L.categoryTotals(entries, ui.month, 'in', cal()), 'in');
 
-    var months = L.lastMonths(entries, ui.month, 6);
+    var months = L.lastMonths(entries, ui.month, 6, cal());
     var max = 0;
     months.forEach(function (x) { max = Math.max(max, x.cashIn, x.cashOut); });
     var chart = $('chart');
@@ -527,7 +626,7 @@
         pair.appendChild(bar);
       });
       col.appendChild(pair);
-      col.appendChild(el('small', null, x.month.slice(2)));
+      col.appendChild(el('small', null, cal().shortLabel(x.month)));
       chart.appendChild(col);
     });
   }
@@ -535,6 +634,7 @@
   function renderSettings() {
     $('langSel').value = state.settings.lang;
     $('themeSel').value = state.settings.theme;
+    $('calSel').value = state.settings.calendar;
     var cs = $('curSel');
     cs.textContent = '';
     L.CURRENCIES.forEach(function (c) { cs.appendChild(option(c, c === 'none' ? '—' : c)); });
@@ -620,7 +720,7 @@
     var c = panel(t('client_section'));
     if (p.client) c.appendChild(kv(t('client_name'), p.client));
     if (p.location) c.appendChild(kv(t('location'), p.location));
-    if (p.startDate || p.endDate) c.appendChild(kv(t('start_date') + ' – ' + t('end_date'), (p.startDate || '…') + ' → ' + (p.endDate || '…')));
+    if (p.startDate || p.endDate) c.appendChild(kv(t('start_date') + ' – ' + t('end_date'), (p.startDate ? fmtDate(p.startDate) : '…') + ' → ' + (p.endDate ? fmtDate(p.endDate) : '…')));
     c.appendChild(kv(t('contract_sum'), money(s.contractSum)));
     c.appendChild(kv(t('certified'), money(s.certified) + ' (' + pct(s.pctComplete) + ' ' + t('pct_complete') + ')'));
     if (s.boqTotal > 0) c.appendChild(kv(t('physical_pct'), pct(s.physicalPct)));
@@ -900,7 +1000,7 @@
     p.bills.slice().sort(function (a, c) { return a.date < c.date ? 1 : a.date > c.date ? -1 : c.id - a.id; }).forEach(function (bill) {
       var card = panel(null);
       card.appendChild(el('h3', null, (bill.supplier || t('uncategorized')) + (bill.desc ? ' – ' + bill.desc : '')));
-      card.appendChild(el('div', 'muted small', bill.date + ' · ' + codeLabel(bill.code)));
+      card.appendChild(el('div', 'muted small', fmtDate(bill.date) + ' · ' + codeLabel(bill.code)));
       card.appendChild(kv(t('bill_amount'), money(bill.amount)));
       thumbsOnly(card, bill.photos);
       card.appendChild(kv(t('paid'), money(L.billPaid(bill))));
@@ -908,7 +1008,7 @@
       card.appendChild(kv(t('balance_due'), money(bal), bal > 0 ? 'neg' : 'pos'));
       bill.payments.forEach(function (pay) {
         var r = el('div', 'pay');
-        r.appendChild(el('span', null, pay.date + ' · ' + money(pay.amount)));
+        r.appendChild(el('span', null, fmtDate(pay.date) + ' · ' + money(pay.amount)));
         r.appendChild(btn('✕', '', function () {
           if (!window.confirm(t('confirm_remove_payment'))) return;
           if (pay.entryId && pay.bookId) removeEntryFromBook(pay.bookId, pay.entryId);
@@ -1017,7 +1117,7 @@
       var c = L.certCalc(p, cert);
       var card = panel(null);
       card.appendChild(el('h3', null, cert.no || t('client')));
-      card.appendChild(el('div', 'muted small', cert.date));
+      card.appendChild(el('div', 'muted small', fmtDate(cert.date)));
       card.appendChild(kv(t('gross'), money(c.gross)));
       card.appendChild(kv('− ' + t('retention_amt'), money(c.retention)));
       card.appendChild(kv('− ' + t('advance_recovery'), money(c.advanceRecovery)));
@@ -1028,7 +1128,7 @@
       card.appendChild(kv(t('balance_due'), money(c.balance), c.balance > 0 ? 'pos' : ''));
       cert.receipts.forEach(function (rc) {
         var r = el('div', 'pay');
-        r.appendChild(el('span', null, rc.date + ' · ' + money(rc.amount)));
+        r.appendChild(el('span', null, fmtDate(rc.date) + ' · ' + money(rc.amount)));
         r.appendChild(btn('✕', '', function () {
           if (!window.confirm(t('confirm_remove_payment'))) return;
           if (rc.entryId && rc.bookId) removeEntryFromBook(rc.bookId, rc.entryId);
@@ -1115,7 +1215,7 @@
     var wk = L.weekRange(ui.labourDate);
     var nav = el('div', 'monthnav');
     nav.appendChild(btn('‹', 'icon', function () { ui.labourDate = addDays(ui.labourDate, -7); renderProjects(); }));
-    nav.appendChild(el('strong', null, t('week') + ' ' + wk.from + ' – ' + wk.to));
+    nav.appendChild(el('strong', null, t('week') + ' ' + fmtDate(wk.from) + ' – ' + fmtDate(wk.to)));
     nav.appendChild(btn('›', 'icon', function () { ui.labourDate = addDays(ui.labourDate, 7); renderProjects(); }));
     body.appendChild(nav);
 
@@ -1127,6 +1227,7 @@
     di.value = ui.labourDate;
     di.addEventListener('change', function () { if (L.isDate(di.value)) { ui.labourDate = di.value; renderProjects(); } });
     dateRow.appendChild(di);
+    makeDate(di, false);
     pn.appendChild(dateRow);
 
     if (!p.workers.length) pn.appendChild(el('p', 'muted small', t('no_workers')));
@@ -1207,7 +1308,7 @@
     openForm({
       title: t('mark_week_paid'),
       fields: [
-        { type: 'note', text: t('pay_wages_note', { from: wk.from, to: wk.to, total: money(pr.total) }) },
+        { type: 'note', text: t('pay_wages_note', { from: fmtDate(wk.from), to: fmtDate(wk.to), total: money(pr.total) }) },
         { key: 'date', label: t('payment_date'), type: 'date', value: L.todayStr(), required: true },
         { key: 'bookId', label: t('record_in_book'), type: 'select', options: books, value: books.length > 1 ? books[1].value : '' }
       ],
@@ -1217,7 +1318,7 @@
         if (target) {
           target.entries.push(L.sanitizeEntry({
             id: L.newId(), type: 'out', amount: pr.total, date: date,
-            category: codeLabel('labour'), note: t('wages_for', { from: wk.from, to: wk.to }), code: 'labour', party: ''
+            category: codeLabel('labour'), note: t('wages_for', { from: fmtDate(wk.from), to: fmtDate(wk.to) }), code: 'labour', party: ''
           }));
         }
         L.markPaid(p, wk.from, wk.to);
@@ -1278,6 +1379,7 @@
   function renderAll() {
     applyTheme();
     applyStaticText();
+    enhanceStaticDates();
     renderBooks();
     renderEntries();
     renderProjects();
@@ -1495,8 +1597,8 @@
   });
 
   /* ---------- reports nav ---------- */
-  $('prevMonth').addEventListener('click', function () { ui.month = L.shiftMonth(ui.month, -1); renderReports(); });
-  $('nextMonth').addEventListener('click', function () { ui.month = L.shiftMonth(ui.month, 1); renderReports(); });
+  $('prevMonth').addEventListener('click', function () { ui.month = cal().shiftMonth(ui.month, -1); renderReports(); });
+  $('nextMonth').addEventListener('click', function () { ui.month = cal().shiftMonth(ui.month, 1); renderReports(); });
 
   /* ---------- tabs ---------- */
   Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
@@ -1571,6 +1673,12 @@
   $('langSel').addEventListener('change', function () { state.settings.lang = this.value; save(); renderAll(); });
   $('curSel').addEventListener('change', function () { state.settings.currency = this.value; save(); renderAll(); });
   $('themeSel').addEventListener('change', function () { state.settings.theme = this.value; save(); applyTheme(); });
+  $('calSel').addEventListener('change', function () {
+    state.settings.calendar = L.CALENDARS.indexOf(this.value) >= 0 ? this.value : 'gregorian';
+    ui.month = cal().monthKey(L.todayStr());
+    save();
+    renderAll();
+  });
 
   $('clearBtn').addEventListener('click', function () {
     if (!window.confirm(t('confirm_clear'))) return;
@@ -1707,6 +1815,7 @@
           next.settings.pinSalt = state.settings.pinSalt;
           state = next;
           ui.projectId = '';
+          ui.month = cal().monthKey(L.todayStr());
           save();
           renderAll();
           toast(t('restored'));

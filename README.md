@@ -23,6 +23,7 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 - **Dark mode** (follows the system, or choose light/dark)
 - **PIN lock** (4–8 digits; locks again when you leave the app)
 - **Currency** (ETB, USD, EUR, GBP, KES, SAR, AED, or none) and **languages**: English, Afaan Oromoo, አማርኛ
+- **Ethiopian calendar (E.C.)** as an alternative to Gregorian (Settings → Calendar): dates are shown, picked (day/month/year with 13 months incl. Pagume) and grouped into months in the Ethiopian calendar, including reports and printed certificates. Dates are still stored as Gregorian, so CSV exports and backups stay compatible
 - Data stays on your device. The app requests no permissions and has no internet access.
 
 > The Afaan Oromoo and Amharic text should be checked by a native speaker (`web/i18n.js`, `web/i18n-projects.js`, `web/i18n-more.js`).

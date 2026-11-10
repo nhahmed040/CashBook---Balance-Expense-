@@ -214,3 +214,11 @@ body.view-settings .fab, body.view-reports .fab { display: none; }
 .boqdone .bar { flex: 1; }
 .boqdone small { min-width: 44px; text-align: right; color: var(--muted); }
 .overqty { color: var(--out); font-size: .8rem; }
+
+/* ---- Ethiopian date picker (three selects) ---- */
+.vh { position: absolute !important; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+.ethdate { display: flex; gap: 6px; }
+.ethdate select { padding: 10px 4px; min-width: 0; }
+.ethdate select:nth-child(1) { flex: 0 0 64px; }
+.ethdate select:nth-child(2) { flex: 1 1 auto; }
+.ethdate select:nth-child(3) { flex: 0 0 84px; }

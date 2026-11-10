@@ -62,11 +62,12 @@
   /* d: { t, money, lang, project, cert, calc, seq:{previous,cumulative}, boq:[items]|null, date, itemAmount, itemEarned, isHeading } */
   function certificateHtml(d) {
     var p = d.project, c = d.cert, k = d.calc, t = d.t, m = d.money;
+    var fd = d.fmt || function (x) { return x; };
     var title = t('cert_title') + ' ' + (c.no || '');
     var h = '<h1>' + esc(title) + '</h1><p class="sub">' + esc(p.name) + '</p>';
     h += metaRows([
-      [t('client_name'), p.client], [t('location'), p.location], [t('date'), c.date],
-      [t('contract_sum'), m(p.contractSum)], [t('prepared'), d.date]
+      [t('client_name'), p.client], [t('location'), p.location], [t('date'), fd(c.date)],
+      [t('contract_sum'), m(p.contractSum)], [t('prepared'), fd(d.date)]
     ]);
 
     h += '<h2>' + esc(t('valuation')) + '</h2><table>';
@@ -107,11 +108,12 @@
   /* d: { t, money, lang, project, summary, codes:[...], codeLabel(c), suppliers:[{supplier,balance}], date, certCalcs:[{cert,calc}], wages } */
   function statementHtml(d) {
     var p = d.project, s = d.summary, t = d.t, m = d.money;
+    var fd = d.fmt || function (x) { return x; };
     var title = t('statement_title') + ' – ' + p.name;
     var h = '<h1>' + esc(t('statement_title')) + '</h1><p class="sub">' + esc(p.name) + '</p>';
     h += metaRows([
       [t('client_name'), p.client], [t('location'), p.location],
-      [t('start_date'), p.startDate], [t('end_date'), p.endDate], [t('prepared'), d.date]
+      [t('start_date'), fd(p.startDate)], [t('end_date'), fd(p.endDate)], [t('prepared'), fd(d.date)]
     ]);
 
     h += '<h2>' + esc(t('client_section')) + '</h2><table>';
@@ -129,7 +131,7 @@
         '</th><th class="n">' + esc(t('gross')) + '</th><th class="n">' + esc(t('payable')) + '</th><th class="n">' + esc(t('received')) +
         '</th><th class="n">' + esc(t('balance_due')) + '</th></tr>';
       d.certCalcs.forEach(function (x) {
-        h += '<tr><td>' + esc(x.cert.no) + '</td><td>' + esc(x.cert.date) + '</td><td class="n">' + esc(m(x.calc.gross)) + '</td><td class="n">' +
+        h += '<tr><td>' + esc(x.cert.no) + '</td><td>' + esc(fd(x.cert.date)) + '</td><td class="n">' + esc(m(x.calc.gross)) + '</td><td class="n">' +
           esc(m(x.calc.payable)) + '</td><td class="n">' + esc(m(x.calc.received)) + '</td><td class="n">' + esc(m(x.calc.balance)) + '</td></tr>';
       });
       h += '</table>';
