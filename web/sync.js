@@ -113,7 +113,11 @@
   var CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
   function cleanDbUrl(u) {
-    u = String(u || '').trim().replace(/\/+$/, '');
+    u = String(u || '').trim().replace(/^["'<\s]+|["'>\s]+$/g, '');
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    u = u.replace(/^http:\/\//i, 'https://');
+    var m = /^(https:\/\/[^\/?#\s]+)/i.exec(u);       // keep only the host: drop any path, .json or query
+    u = m ? m[1].toLowerCase() : '';
     return DB_RE.test(u) ? u : '';
   }
   function randomString(n, alphabet) {
