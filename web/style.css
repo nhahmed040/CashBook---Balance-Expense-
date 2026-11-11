@@ -427,3 +427,12 @@ button.google .gmark { font-size: 1.15rem; background: linear-gradient(90deg, #4
 .aboutlist dt { color: var(--muted); }
 .aboutlist dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; text-align: right; }
 .aboutlist a { color: var(--accent); text-decoration: none; }
+
+/* people with access: name on its own line, controls below */
+#cloudPanel .member { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px; background: var(--bg); border-radius: 14px; }
+#cloudPanel .member .mname { flex: none; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
+#cloudPanel .member .acts { display: flex; gap: 8px; align-items: center; }
+#cloudPanel .member .acts select { flex: 1; min-width: 0; }
+#cloudPanel .member .acts button { flex: 0 0 auto; }
+#cloudPanel { overflow: hidden; }
+#cloudPanel * { max-width: 100%; }

@@ -1671,7 +1671,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '1.9';
+  var APP_VERSION = '1.9.1';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });
@@ -2251,14 +2251,16 @@
               if (uids.length) P.appendChild(el('h2', null, t('members')));
               uids.forEach(function (uid) {
                 var m = inf.members[uid], r2 = el('div', 'member');
-                r2.appendChild(el('span', null, m.name ? m.name + ' (' + (m.email || '') + ')' : (m.email || uid)));
+                r2.appendChild(el('span', 'mname', m.name ? m.name + ' (' + (m.email || '') + ')' : (m.email || uid)));
+                var acts = el('div', 'acts');
                 var sel = document.createElement('select');
                 sel.appendChild(option('view', t('role_view'))); sel.appendChild(option('edit', t('role_edit'))); sel.value = m.role;
                 sel.addEventListener('change', function () { cloud.setRole(sy.id, uid, this.value).then(function () { m.role = sel.value; }, fail); });
-                r2.appendChild(sel);
-                r2.appendChild(btn(t('remove'), 'danger', function () {
+                acts.appendChild(sel);
+                acts.appendChild(btn(t('remove'), 'danger', function () {
                   cloud.removeMember(sy.id, uid).then(function () { delete inf.members[uid]; renderCloud(); renderBooks(); }, fail);
                 }));
+                r2.appendChild(acts);
                 P.appendChild(r2);
               });
             }
