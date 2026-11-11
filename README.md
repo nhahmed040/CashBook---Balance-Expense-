@@ -81,6 +81,8 @@ The app has no server of its own. You create a free Firebase project that belong
 5. **Project settings (gear) → General → Your apps → Web (`</>`)** and register an app; copy the `apiKey` value.
 6. In CashBook go to Settings → Online backup, enter the database URL, the Web API key, your email and a password, and tap **Create account**. Other people use the same URL and key with their own email.
 
+The app is already connected to the project in `web/cloud-config.js` (database URL and Web API key), so users only enter an email and password. To use another Firebase project, edit that file or use Settings → Online backup → Advanced.
+
 To share a book: open it, Settings → **Share this book online**, pick *View only* or *Can edit*, **Create invite code**, and send the code. The other person signs in and pastes it under **Join a shared book**.
 
 Notes: the free Firebase plan is plenty for cash books. Anyone with your database URL and key can try to create an account, so only give them to people you trust, and you can turn sign-ups off or delete users in the Firebase console. Online backup keeps the latest copy only.

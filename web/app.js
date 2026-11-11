@@ -1858,11 +1858,12 @@
         get: function () { try { return JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}') || {}; } catch (e) { return {}; } },
         set: function (o) { try { localStorage.setItem(CLOUD_KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } }
       },
-      now: function () { return Date.now(); }
+      now: function () { return Date.now(); },
+      defaults: window.CB_CLOUD_DEFAULTS || {}
     });
     var info = {};            // shared book id -> { meta, members } from the last sync
     var invite = '';          // last invite text shown
-    var busy = false, again = false, timer = 0, rulesShown = false;
+    var busy = false, again = false, timer = 0, rulesShown = false, advanced = false;
     var inviteRole = 'view';
     var status = '';
 
@@ -2005,23 +2006,27 @@
       P.appendChild(el('p', 'muted small', t('cloud_intro')));
 
       if (!ready()) {
-        P.appendChild(field(t('db_url'), 'url', c.dbUrl, 'cDb'));
-        P.appendChild(field(t('api_key'), 'text', c.apiKey, 'cKey'));
         P.appendChild(field(t('email'), 'email', c.email, 'cMail'));
         P.appendChild(field(t('password'), 'password', '', 'cPass'));
         var row = el('div', 'row');
         function auth(kind) {
           return function () {
-            var db = CS.cleanDbUrl(val('cDb'));
+            var db = CS.cleanDbUrl($('cDb') ? val('cDb') : c.dbUrl);
             if (!db) { toast(t('bad_db_url')); return; }
-            if (!val('cKey') || !val('cMail') || !val('cPass')) { toast(t('need_config')); return; }
-            cloud.patchCfg({ dbUrl: db, apiKey: val('cKey').replace(/["'\s,]/g, ''), email: val('cMail') });
+            var key = ($('cKey') ? val('cKey') : c.apiKey || '').replace(/["'\s,]/g, '');
+            if (!key || !val('cMail') || !val('cPass')) { toast(t('need_config')); return; }
+            cloud.patchCfg({ dbUrl: db, apiKey: key, email: val('cMail') });
             cloud[kind](val('cMail'), $('cPass').value).then(function () { status = ''; renderAll(); syncAll(false); backupNow(true); }, fail);
           };
         }
         row.appendChild(btn(t('sign_in'), 'primary', auth('signIn')));
         row.appendChild(btn(t('sign_up'), '', auth('signUp')));
         P.appendChild(row);
+        P.appendChild(btn(t('advanced'), 'block', function () { advanced = !advanced; renderCloud(); }));
+        if (advanced) {
+          P.appendChild(field(t('db_url'), 'url', c.dbUrl, 'cDb'));
+          P.appendChild(field(t('api_key'), 'text', c.apiKey, 'cKey'));
+        }
       } else {
         P.appendChild(el('p', 'muted small', t('signed_in_as', { e: c.email || '' })));
         P.appendChild(btn(t('cloud_backup_now'), 'block', function () { backupNow(false); }));

@@ -144,7 +144,12 @@
   /* env: { fetch, store:{get(),set(obj)}, now() }  - store keeps {dbUrl, apiKey, email, uid, idToken, refresh, exp} */
   function createCloud(env) {
     var now = env.now || function () { return Date.now(); };
-    function cfg() { return env.store.get() || {}; }
+    function cfg() {
+      var c = env.store.get() || {}, d = env.defaults || {};
+      if (!c.dbUrl && d.dbUrl) c.dbUrl = d.dbUrl;
+      if (!c.apiKey && d.apiKey) c.apiKey = d.apiKey;
+      return c;
+    }
     function patchCfg(p) { var c = cfg(); Object.keys(p).forEach(function (k) { c[k] = p[k]; }); env.store.set(c); return c; }
 
     function json(res) {
