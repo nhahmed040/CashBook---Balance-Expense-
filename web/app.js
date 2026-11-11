@@ -2015,7 +2015,7 @@
             var db = CS.cleanDbUrl(val('cDb'));
             if (!db) { toast(t('bad_db_url')); return; }
             if (!val('cKey') || !val('cMail') || !val('cPass')) { toast(t('need_config')); return; }
-            cloud.patchCfg({ dbUrl: db, apiKey: val('cKey'), email: val('cMail') });
+            cloud.patchCfg({ dbUrl: db, apiKey: val('cKey').replace(/["'\s,]/g, ''), email: val('cMail') });
             cloud[kind](val('cMail'), $('cPass').value).then(function () { status = ''; renderAll(); syncAll(false); backupNow(true); }, fail);
           };
         }

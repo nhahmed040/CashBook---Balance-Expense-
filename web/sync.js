@@ -164,7 +164,7 @@
       }).then(json, function () { throw netFail(); }).then(function (r) {
         if (!r.ok) {
           var msg = r.body && r.body.error && r.body.error.message ? String(r.body.error.message) : 'auth-failed';
-          throw CloudError(msg.split(' ')[0]);
+          throw CloudError(/api key not valid|API_KEY_INVALID/i.test(msg) ? 'API_KEY_INVALID' : msg.split(/[\s:]/)[0]);
         }
         return r.body;
       });
