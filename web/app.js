@@ -30,9 +30,16 @@
     return L.sanitizeState(null, { keepPin: true });
   }
 
-  function save() {
+  var rev = 0;                       // bumps on every local change (sync checks it)
+  function saveRaw() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
   }
+  function save() {
+    rev++;
+    saveRaw();
+    if (window.__scheduleSync) window.__scheduleSync();
+  }
+  function canEdit(b) { return !b.sync || b.sync.role !== 'view'; }
 
   function book() {
     for (var i = 0; i < state.books.length; i++) if (state.books[i].id === state.current) return state.books[i];
@@ -522,12 +529,13 @@
   function renderBooks() {
     var sel = $('bookSelect');
     sel.textContent = '';
-    state.books.forEach(function (b) { sel.appendChild(option(b.id, b.name)); });
+    state.books.forEach(function (b) { sel.appendChild(option(b.id, (b.sync ? (b.sync.role === 'view' ? '\uD83D\uDC41 ' : '\uD83D\uDC65 ') : '') + b.name)); });
     sel.value = book().id;
   }
 
   function renderEntries() {
     var b = book();
+    $('fab').classList.toggle('vo', !canEdit(b));
     var tot = L.totals(b.entries);
     $('balance').textContent = money(tot.balance);
     $('totalIn').textContent = money(tot.cashIn);
@@ -1385,6 +1393,7 @@
     renderProjects();
     renderReports();
     renderSettings();
+    if (window.__renderCloud) window.__renderCloud();
   }
 
   var VIEWS = ['entries', 'projects', 'reports', 'settings'];
@@ -1439,6 +1448,7 @@
   }
 
   function openEntry(id) {
+    if (!canEdit(book())) { toast(t('view_only_note')); return; }
     ui.editingId = id || null;
     var e = null;
     if (id) {
@@ -1681,6 +1691,7 @@
   });
 
   $('clearBtn').addEventListener('click', function () {
+    if (!canEdit(book())) { toast(t('view_only_note')); return; }
     if (!window.confirm(t('confirm_clear'))) return;
     dropPaymentsOfBook(book().id);
     deletePhotoIds(entryPhotoIds(book().entries));
@@ -1823,6 +1834,7 @@
           var res = L.entriesFromCsv(text);
           if (!res.entries.length) throw new Error('no rows');
           if (!window.confirm(t('import_confirm', { n: res.entries.length }))) return;
+          if (!canEdit(book())) { toast(t('view_only_note')); return; }
           var entries = book().entries;
           res.entries.forEach(function (e) { e.id = L.newId(); entries.push(e); });
           save();
@@ -1835,6 +1847,268 @@
     };
     reader.readAsText(file);
   });
+
+  /* ---------- online backup and shared books ---------- */
+  (function () {
+    var CS = window.CBSync;
+    var CLOUD_KEY = 'cashbook.cloud.v1';   // sign-in and connection settings; never part of backups
+    var cloud = CS.createCloud({
+      fetch: function () { return window.fetch.apply(window, arguments); },
+      store: {
+        get: function () { try { return JSON.parse(localStorage.getItem(CLOUD_KEY) || '{}') || {}; } catch (e) { return {}; } },
+        set: function (o) { try { localStorage.setItem(CLOUD_KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } }
+      },
+      now: function () { return Date.now(); }
+    });
+    var info = {};            // shared book id -> { meta, members } from the last sync
+    var invite = '';          // last invite text shown
+    var busy = false, again = false, timer = 0, rulesShown = false;
+    var inviteRole = 'view';
+    var status = '';
+
+    function errText(e) {
+      var c = (e && e.code) || 'x';
+      var m = { network: 'err_network', permission: 'err_permission', EMAIL_EXISTS: 'err_exists', INVALID_LOGIN_CREDENTIALS: 'err_login',
+        INVALID_PASSWORD: 'err_login', EMAIL_NOT_FOUND: 'err_login', WEAK_PASSWORD: 'err_weak', INVALID_EMAIL: 'err_email',
+        OPERATION_NOT_ALLOWED: 'err_provider', TOO_MANY_ATTEMPTS_TRY_LATER: 'err_many', API_KEY_INVALID: 'err_key',
+        'not-configured': 'need_config', 'not-signed-in': 'need_signin' }[c];
+      return m ? t(m) : t('err_generic', { c: c });
+    }
+    function fail(e) { toast(errText(e)); status = errText(e); renderCloud(); }
+    function sharedBooks() { return state.books.filter(function (b) { return !!b.sync; }); }
+    function ready() { return cloud.signedIn(); }
+    function stamp(ms) { return ms ? new Date(ms).toLocaleString() : t('never'); }
+    function roleName(r) { return t(r === 'owner' ? 'role_owner' : r === 'edit' ? 'role_edit' : 'role_view'); }
+
+    /* ----- sync ----- */
+    function syncBook(b) {
+      var sy = b.sync, startRev = rev;
+      return cloud.getBook(sy.id).catch(function (e) {
+        if (e && e.code === 'permission') return null;      // removed from the book, or the owner stopped sharing
+        throw e;
+      }).then(function (data) {
+        var me = cloud.cfg().uid;
+        var role = data && data.meta ? (data.meta.owner === me ? 'owner' : (data.members && data.members[me] && data.members[me].role) || null) : null;
+        if (!role) return { gone: true };
+        info[sy.id] = { meta: data.meta, members: data.members || {} };
+        var r = CS.merge({ local: b.entries, S: sy.S, U: sy.U, remote: data.entries || null, role: role, now: Date.now(), sanitize: L.sanitizeEntry });
+        return cloud.pushEntries(sy.id, r.push).then(function () {
+          if (rev !== startRev) { again = true; return { changed: false }; }   // edited meanwhile: merge again next round
+          var changed = r.changed || sy.role !== role;
+          b.entries = r.entries; sy.S = r.S; sy.U = r.U; sy.role = role; sy.last = Date.now();
+          if (role !== 'owner' && data.meta.name && b.name !== data.meta.name) { b.name = data.meta.name; changed = true; }
+          return { changed: changed };
+        });
+      });
+    }
+    function syncAll(manual) {
+      if (!ready() || !sharedBooks().length) { if (manual) { if (!ready()) toast(t('need_signin')); } return Promise.resolve(); }
+      if (busy) { again = true; return Promise.resolve(); }
+      busy = true; again = false;
+      var books = sharedBooks(), changed = false, chain = Promise.resolve();
+      books.forEach(function (b) {
+        chain = chain.then(function () { return syncBook(b); }).then(function (r) {
+          if (r.gone) { toast(t('sync_gone', { n: b.name })); delete b.sync; changed = true; }
+          else if (r.changed) changed = true;
+        });
+      });
+      return chain.then(function () {
+        busy = false; status = t('synced');
+        saveRaw();
+        if (changed) renderAll(); else renderCloud();
+        if (manual) toast(t('synced'));
+        if (again) { again = false; schedule(300); }
+      }, function (e) { busy = false; if (manual) fail(e); else { status = errText(e); renderCloud(); } });
+    }
+    function schedule(ms) {
+      if (!ready() || !sharedBooks().length) return;
+      clearTimeout(timer);
+      timer = setTimeout(function () { syncAll(false); }, ms == null ? 2500 : ms);
+    }
+    window.__scheduleSync = function () { schedule(); };
+    window.__syncNow = function () { return syncAll(true); };
+
+    /* ----- backup ----- */
+    function backupText() {
+      var copy = JSON.parse(JSON.stringify(state));
+      delete copy.settings.pinHash; delete copy.settings.pinSalt;
+      copy.books.forEach(function (b) { delete b.sync; });
+      return JSON.stringify(copy);
+    }
+    function backupNow(quiet) {
+      return cloud.backupPut(backupText()).then(function () {
+        cloud.patchCfg({ lastBackup: Date.now() });
+        if (!quiet) toast(t('cloud_backup_done'));
+        renderCloud();
+      }, function (e) { if (!quiet) fail(e); });
+    }
+    function restoreNow() {
+      cloud.backupGet().then(function (b) {
+        if (!b || typeof b.data !== 'string') { toast(t('cloud_no_backup')); return; }
+        if (!window.confirm(t('cloud_restore_confirm'))) return;
+        var parsed = JSON.parse(b.data);
+        var next = L.sanitizeState(parsed, { keepPin: false });
+        next.settings.pinHash = state.settings.pinHash;
+        next.settings.pinSalt = state.settings.pinSalt;
+        state = next; ui.projectId = ''; ui.month = cal().monthKey(L.todayStr());
+        save(); renderAll(); toast(t('restored'));
+      }).catch(fail);
+    }
+
+    /* ----- sharing ----- */
+    function shareCurrent() {
+      var b = book();
+      if (!ready()) { toast(t('need_signin')); return; }
+      var id = CS.newBookId();
+      cloud.createBook(id, b.name).then(function () {
+        b.sync = { id: id, role: 'owner', S: {}, U: {}, last: 0 };
+        save();
+        return syncAll(true).then(function () { renderAll(); });
+      }).catch(fail);
+    }
+    function makeInvite() {
+      var b = book();
+      cloud.createInvite(b.sync.id, inviteRole).then(function (code) { invite = b.sync.id + '.' + code; renderCloud(); }).catch(fail);
+    }
+    function joinBook(text) {
+      var p = CS.parseShare(text);
+      if (!p) { toast(t('bad_code')); return; }
+      if (!ready()) { toast(t('need_signin')); return; }
+      if (state.books.some(function (b) { return b.sync && b.sync.id === p.bookId; })) { toast(t('already_joined')); return; }
+      cloud.join(p.bookId, p.code, p.role).then(function () { return cloud.getBook(p.bookId); }).then(function (data) {
+        if (!data || !data.meta) throw { code: 'permission' };
+        var nb = { id: 'b' + L.newId(), name: String(data.meta.name || 'Shared').slice(0, 40), projectId: '', entries: [],
+                   sync: { id: p.bookId, role: p.role, S: {}, U: {}, last: 0 } };
+        state.books.push(nb); state.current = nb.id;
+        save(); toast(t('joined', { n: nb.name }));
+        return syncAll(false);
+      }).then(function () { renderAll(); }).catch(function (e) { fail(e && e.code ? e : { code: 'permission' }); });
+    }
+    function unlink(b) { delete b.sync; save(); renderAll(); }
+
+    /* ----- panel ----- */
+    function field(label, type, value, id) {
+      var l = el('label', 'field'); l.appendChild(el('span', null, label));
+      var i = document.createElement('input'); i.type = type; i.id = id; i.value = value || ''; i.autocomplete = 'off';
+      i.setAttribute('autocapitalize', 'off'); i.spellcheck = false;
+      l.appendChild(i); return l;
+    }
+    function val(id) { var e = $(id); return e ? e.value.trim() : ''; }
+
+    function renderCloud() {
+      var P = $('cloudPanel');
+      if (!P) return;
+      if (P.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;   // do not disturb typing
+      var c = cloud.cfg(), b = book();
+      P.textContent = '';
+      P.appendChild(el('h2', null, t('cloud_title')));
+      P.appendChild(el('p', 'muted small', t('cloud_intro')));
+
+      if (!ready()) {
+        P.appendChild(field(t('db_url'), 'url', c.dbUrl, 'cDb'));
+        P.appendChild(field(t('api_key'), 'text', c.apiKey, 'cKey'));
+        P.appendChild(field(t('email'), 'email', c.email, 'cMail'));
+        P.appendChild(field(t('password'), 'password', '', 'cPass'));
+        var row = el('div', 'row');
+        function auth(kind) {
+          return function () {
+            var db = CS.cleanDbUrl(val('cDb'));
+            if (!db) { toast(t('bad_db_url')); return; }
+            if (!val('cKey') || !val('cMail') || !val('cPass')) { toast(t('need_config')); return; }
+            cloud.patchCfg({ dbUrl: db, apiKey: val('cKey'), email: val('cMail') });
+            cloud[kind](val('cMail'), $('cPass').value).then(function () { status = ''; renderAll(); syncAll(false); backupNow(true); }, fail);
+          };
+        }
+        row.appendChild(btn(t('sign_in'), 'primary', auth('signIn')));
+        row.appendChild(btn(t('sign_up'), '', auth('signUp')));
+        P.appendChild(row);
+      } else {
+        P.appendChild(el('p', 'muted small', t('signed_in_as', { e: c.email || '' })));
+        P.appendChild(btn(t('cloud_backup_now'), 'block', function () { backupNow(false); }));
+        P.appendChild(btn(t('cloud_restore'), 'block', restoreNow));
+        P.appendChild(el('p', 'muted small', t('cloud_last_backup', { t: stamp(c.lastBackup) })));
+
+        P.appendChild(el('h2', null, t('book_shared') + ': ' + b.name));
+        if (!b.sync) {
+          P.appendChild(btn(t('share_book'), 'block', shareCurrent));
+        } else {
+          var sy = b.sync, inf = info[sy.id];
+          P.appendChild(el('p', 'muted small', t('sharing_on', { r: roleName(sy.role) }) + ' · ' + t('last_sync', { t: stamp(sy.last) })));
+          if (sy.role === 'view') P.appendChild(el('p', 'muted small', t('view_only_note')));
+          P.appendChild(btn(t('sync_now'), 'block', function () { syncAll(true); }));
+          if (sy.role === 'owner') {
+            var ir = el('label', 'field'); ir.appendChild(el('span', null, t('invite_as')));
+            var rs = document.createElement('select');
+            rs.appendChild(option('view', t('role_view'))); rs.appendChild(option('edit', t('role_edit')));
+            rs.value = inviteRole; rs.addEventListener('change', function () { inviteRole = this.value; });
+            ir.appendChild(rs); P.appendChild(ir);
+            P.appendChild(btn(t('make_invite'), 'block', makeInvite));
+            if (invite) {
+              P.appendChild(el('p', 'muted small', t('invite_text')));
+              var box = document.createElement('input'); box.type = 'text'; box.readOnly = true; box.value = invite; box.className = 'code'; box.id = 'inviteBox';
+              P.appendChild(box);
+              P.appendChild(btn(t('copy'), 'block', function () {
+                box.select();
+                try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(invite); else document.execCommand('copy'); toast(t('copied')); } catch (e) { /* user can copy by hand */ }
+              }));
+            }
+            P.appendChild(btn(t('revoke_invites'), 'block', function () {
+              cloud.revokeInvites(sy.id).then(function () { invite = ''; toast(t('invites_revoked')); renderCloud(); }, fail);
+            }));
+            if (inf) {
+              P.appendChild(el('h2', null, t('members')));
+              var uids = Object.keys(inf.members);
+              if (!uids.length) P.appendChild(el('p', 'muted small', '—'));
+              uids.forEach(function (uid) {
+                var m = inf.members[uid], r2 = el('div', 'member');
+                r2.appendChild(el('span', null, m.email || uid));
+                var sel = document.createElement('select');
+                sel.appendChild(option('view', t('role_view'))); sel.appendChild(option('edit', t('role_edit'))); sel.value = m.role;
+                sel.addEventListener('change', function () { cloud.setRole(sy.id, uid, this.value).then(function () { m.role = sel.value; }, fail); });
+                r2.appendChild(sel);
+                r2.appendChild(btn(t('remove'), 'danger', function () {
+                  cloud.removeMember(sy.id, uid).then(function () { delete inf.members[uid]; renderCloud(); }, fail);
+                }));
+                P.appendChild(r2);
+              });
+            }
+            P.appendChild(btn(t('stop_sharing'), 'block danger', function () {
+              if (!window.confirm(t('confirm_stop_sharing'))) return;
+              cloud.deleteBook(sy.id).then(function () { invite = ''; unlink(b); }, fail);
+            }));
+          } else {
+            P.appendChild(btn(t('leave_book'), 'block danger', function () {
+              if (!window.confirm(t('confirm_leave'))) return;
+              cloud.removeMember(sy.id, cloud.cfg().uid).then(function () { unlink(b); }, fail);
+            }));
+          }
+        }
+
+        P.appendChild(el('h2', null, t('join_title')));
+        P.appendChild(field(t('join_ph'), 'text', '', 'cJoin'));
+        P.appendChild(btn(t('join'), 'block primary', function () { joinBook(val('cJoin')); }));
+        if (status) P.appendChild(el('p', 'muted small', status));
+        P.appendChild(btn(t('sign_out'), 'block', function () { cloud.signOut(); invite = ''; status = ''; renderAll(); }));
+      }
+
+      P.appendChild(btn(t('show_rules'), 'block', function () { rulesShown = !rulesShown; renderCloud(); }));
+      if (rulesShown) {
+        var ta = document.createElement('textarea'); ta.readOnly = true; ta.value = JSON.stringify(CS.RULES, null, 2);
+        P.appendChild(ta);
+      }
+    }
+    window.__renderCloud = renderCloud;
+
+    /* ----- start: sync when the app opens / returns, then every 30 s ----- */
+    function auto() { if (!document.hidden) syncAll(false); }
+    document.addEventListener('visibilitychange', auto);
+    setInterval(auto, 30000);
+    setTimeout(function () {
+      auto();
+      var c = cloud.cfg();
+      if (ready() && (!c.lastBackup || Date.now() - c.lastBackup > 86400000)) backupNow(true);
+    }, 1500);
+  })();
 
   /* ---------- start ---------- */
   showView('entries');

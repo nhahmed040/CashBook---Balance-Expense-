@@ -24,7 +24,8 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 - **PIN lock** (4–8 digits; locks again when you leave the app)
 - **Currency** (ETB, USD, EUR, GBP, KES, SAR, AED, or none) and **languages**: English, Afaan Oromoo, አማርኛ
 - **Ethiopian calendar (E.C.)** as an alternative to Gregorian (Settings → Calendar): dates are shown, picked (day/month/year with 13 months incl. Pagume) and grouped into months in the Ethiopian calendar, including reports and printed certificates. Dates are still stored as Gregorian, so CSV exports and backups stay compatible
-- Data stays on your device. The app requests no permissions and has no internet access.
+- **Online backup and shared books** (optional, Settings → Online backup & shared books): back up all data to your own free Firebase project and restore it on another phone, and share a cash book with another person. The owner chooses per invite whether the other person can **edit** or **view only**, can change a person's role later, remove them, or stop sharing. Changes sync automatically (and with "Sync now"); edits made on both phones merge entry by entry, the newest edit wins. Photos, projects and PINs are not uploaded.
+- Data stays on your device unless you turn on online backup or sharing. The only permission is Internet, used only for that.
 
 > The Afaan Oromoo and Amharic text should be checked by a native speaker (`web/i18n.js`, `web/i18n-projects.js`, `web/i18n-more.js`).
 > New projects start with VAT 15% and retention 5% as placeholders. Set VAT, withholding tax, retention and advance to what your contract says.
@@ -68,3 +69,18 @@ To try the web version only, open `web/index.html` in a browser.
 ## Notes
 
 This is an independent project and is not affiliated with any commercial cashbook or wallet app.
+
+## Online backup and sharing: one-time setup (about 5 minutes)
+
+The app has no server of its own. You create a free Firebase project that belongs to you, and every person who shares books uses the same project.
+
+1. Go to <https://console.firebase.google.com>, sign in with Google, **Add project** (turn Google Analytics off).
+2. **Build → Authentication → Get started → Email/Password → Enable → Save.**
+3. **Build → Realtime Database → Create database** (pick any location, start in locked mode). Copy the database URL shown at the top, like `https://yourproject-default-rtdb.firebaseio.com`.
+4. In Realtime Database open the **Rules** tab, replace everything with the contents of [`firebase-rules.json`](firebase-rules.json) (also shown in the app under *Show database rules*) and **Publish**.
+5. **Project settings (gear) → General → Your apps → Web (`</>`)** and register an app; copy the `apiKey` value.
+6. In CashBook go to Settings → Online backup, enter the database URL, the Web API key, your email and a password, and tap **Create account**. Other people use the same URL and key with their own email.
+
+To share a book: open it, Settings → **Share this book online**, pick *View only* or *Can edit*, **Create invite code**, and send the code. The other person signs in and pastes it under **Join a shared book**.
+
+Notes: the free Firebase plan is plenty for cash books. Anyone with your database URL and key can try to create an account, so only give them to people you trust, and you can turn sign-ups off or delete users in the Firebase console. Online backup keeps the latest copy only.

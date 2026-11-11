@@ -1,0 +1,37 @@
+{
+  "rules": {
+    "backups": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "invites": {
+      "$b": {
+        ".read": "auth != null && root.child('books/'+$b+'/meta/owner').val() === auth.uid",
+        ".write": "auth != null && root.child('books/'+$b+'/meta/owner').val() === auth.uid"
+      }
+    },
+    "books": {
+      "$b": {
+        ".read": "auth != null && (data.child('meta/owner').val() === auth.uid || data.child('members/'+auth.uid+'/role').exists())",
+        ".write": "auth != null && data.child('meta/owner').val() === auth.uid",
+        "meta": {
+          ".write": "auth != null && ((!data.exists() && newData.child('owner').val() === auth.uid) || data.child('owner').val() === auth.uid)",
+          ".validate": "!data.exists() || newData.child('owner').val() === data.child('owner').val()"
+        },
+        "members": {
+          "$u": {
+            ".write": "auth != null && (root.child('books/'+$b+'/meta/owner').val() === auth.uid || ($u === auth.uid && !newData.exists()) || ($u === auth.uid && !data.exists() && root.child('invites/'+$b+'/'+newData.child('code').val()).val() === newData.child('role').val()))",
+            ".validate": "newData.hasChildren(['role']) && (newData.child('role').val() === 'edit' || newData.child('role').val() === 'view')"
+          }
+        },
+        "entries": {
+          "$e": {
+            ".write": "auth != null && (root.child('books/'+$b+'/meta/owner').val() === auth.uid || root.child('books/'+$b+'/members/'+auth.uid+'/role').val() === 'edit')"
+          }
+        }
+      }
+    }
+  }
+}

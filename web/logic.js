@@ -214,6 +214,24 @@
   }
 
   /* opts.keepPin: carry pinHash/pinSalt from raw (true for local storage, false for imports) */
+  /* Link between a local book and its shared online copy. */
+  function sanitizeSync(x) {
+    if (!x || typeof x !== 'object' || !/^[a-z0-9]{6,20}$/.test(String(x.id || ''))) return null;
+    function map(m, isNum) {
+      var out = {}, n = 0;
+      if (m && typeof m === 'object') Object.keys(m).forEach(function (k) {
+        if (n < 20000 && /^\d{1,20}$/.test(k) && (isNum ? typeof m[k] === 'number' && isFinite(m[k]) : typeof m[k] === 'string' && m[k].length < 20)) { out[k] = m[k]; n++; }
+      });
+      return out;
+    }
+    return {
+      id: x.id,
+      role: x.role === 'owner' || x.role === 'edit' ? x.role : 'view',
+      S: map(x.S, false), U: map(x.U, true),
+      last: typeof x.last === 'number' && isFinite(x.last) ? x.last : 0
+    };
+  }
+
   function sanitizeState(raw, opts) {
     var keepPin = !!(opts && opts.keepPin);
     var s = defaultState();
@@ -245,12 +263,15 @@
         var id = str(b.id, 40) || ('b' + (i + 1));
         while (seenIds[id]) id = id + '_';
         seenIds[id] = true;
-        books.push({
+        var nb = {
           id: id,
           name: str(b.name, 40) || ('Book ' + (books.length + 1)),
           projectId: pIds[b.projectId] ? b.projectId : '',
           entries: uniqueEntries(b.entries)
-        });
+        };
+        var sy = sanitizeSync(b.sync);
+        if (sy) nb.sync = sy;
+        books.push(nb);
       });
       if (books.length) {
         s.books = books;
