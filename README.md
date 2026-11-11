@@ -24,7 +24,7 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 - **PIN lock** (4–8 digits; locks again when you leave the app)
 - **Currency** (ETB, USD, EUR, GBP, KES, SAR, AED, or none) and **languages**: English, Afaan Oromoo, አማርኛ
 - **Ethiopian calendar (E.C.)** as an alternative to Gregorian (Settings → Calendar): dates are shown, picked (day/month/year with 13 months incl. Pagume) and grouped into months in the Ethiopian calendar, including reports and printed certificates. Dates are still stored as Gregorian, so CSV exports and backups stay compatible
-- **Online backup and shared books** (optional, Settings → Online backup & shared books): back up all data to your own free Firebase project and restore it on another phone, and share a cash book with another person. The owner chooses per invite whether the other person can **edit** or **view only**, can change a person's role later, remove them, or stop sharing. Changes sync automatically (and with "Sync now"); edits made on both phones merge entry by entry, the newest edit wins. Photos, projects and PINs are not uploaded.
+- **Online sync and backup** (optional, Settings → Online sync & backup): sign up with your name, phone, company and role. After that **all your books sync automatically** to your account and appear on any phone where you sign in, you can back up and restore everything, and you can share a book with another person. The owner chooses per invite whether the other person can **edit** or **view only**, can change a person's role later, remove them, or stop sharing. Changes sync automatically (and with "Sync now"); edits made on both phones merge entry by entry, the newest edit wins. Photos, projects and PINs are not uploaded.
 - Data stays on your device unless you turn on online backup or sharing. The only permission is Internet, used only for that.
 
 > The Afaan Oromoo and Amharic text should be checked by a native speaker (`web/i18n.js`, `web/i18n-projects.js`, `web/i18n-more.js`).
@@ -83,6 +83,8 @@ The app has no server of its own. You create a free Firebase project that belong
 
 The app is already connected to the project in `web/cloud-config.js` (database URL and Web API key), so users only enter an email and password. To use another Firebase project, edit that file or use Settings → Online backup → Advanced.
 
-To share a book: open it, Settings → **Share this book online**, pick *View only* or *Can edit*, **Create invite code**, and send the code. The other person signs in and pastes it under **Join a shared book**.
+To share a book: open it, Settings → **Share this book**, pick *View only* or *Can edit*, **Create invite code**, and send the code. The other person signs in and pastes it under **Join a shared book**.
 
 Notes: the free Firebase plan is plenty for cash books. Anyone with your database URL and key can try to create an account, so only give them to people you trust, and you can turn sign-ups off or delete users in the Firebase console. Online backup keeps the latest copy only.
+
+**Update the rules once more for v1.7:** replace the Realtime Database rules with the new `firebase-rules.json` (it adds the `users` section for profiles and the list of your books) and Publish. Without this, signing up works but profiles and syncing to a second phone are refused.

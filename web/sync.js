@@ -224,9 +224,22 @@
 
     /* shared books */
     function createBook(id, name) {
-      var me = cfg();
-      return db('PUT', 'books/' + id + '/meta', { owner: me.uid, ownerEmail: me.email || '', name: name, created: now() });
+      var me = cfg(), pr = me.profile || {};
+      return db('PUT', 'books/' + id + '/meta', { owner: me.uid, ownerEmail: me.email || '', ownerName: pr.name || '', name: name, created: now() });
     }
+    function setBookName(id, name) { return db('PUT', 'books/' + id + '/meta/name', name); }
+
+    /* my profile and my list of books (so a new phone finds them) */
+    function profilePut(p) {
+      var clean = { name: String(p.name || '').slice(0, 60), phone: String(p.phone || '').slice(0, 30), company: String(p.company || '').slice(0, 60), role: String(p.role || '').slice(0, 40) };
+      return db('PUT', 'users/' + cfg().uid + '/profile', clean).then(function () { patchCfg({ profile: clean }); return clean; });
+    }
+    function profileGet() {
+      return db('GET', 'users/' + cfg().uid + '/profile').then(function (p) { if (p) patchCfg({ profile: p }); return p; });
+    }
+    function indexPut(id, name, role) { return db('PUT', 'users/' + cfg().uid + '/books/' + id, { name: String(name).slice(0, 40), role: role }); }
+    function indexGet() { return db('GET', 'users/' + cfg().uid + '/books'); }
+    function indexDelete(id) { return db('DELETE', 'users/' + cfg().uid + '/books/' + id); }
     function getBook(id) { return db('GET', 'books/' + id); }
     function pushEntries(id, map) {
       var upd = {};
@@ -242,16 +255,17 @@
     function join(id, code, role) {
       var me = cfg();
       // the invite is validated by the database rules
-      return db('PUT', 'books/' + id + '/members/' + me.uid, { role: role, code: code, email: me.email || '' });
+      return db('PUT', 'books/' + id + '/members/' + me.uid, { role: role, code: code, email: me.email || '', name: (me.profile && me.profile.name) || '' });
     }
     function setRole(id, uid, role) { return db('PUT', 'books/' + id + '/members/' + uid + '/role', role === 'edit' ? 'edit' : 'view'); }
     function removeMember(id, uid) { return db('DELETE', 'books/' + id + '/members/' + uid); }
-    function deleteBook(id) { return db('DELETE', 'books/' + id).then(function () { return db('DELETE', 'invites/' + id); }); }
+    function deleteBook(id) { return db('DELETE', 'invites/' + id).then(function () { return db('DELETE', 'books/' + id); }); }   // invites first: their rule needs the book's owner
 
     return {
       cfg: cfg, patchCfg: patchCfg, signUp: signUp, signIn: signIn, signOut: signOut, signedIn: signedIn,
       backupPut: backupPut, backupGet: backupGet,
-      createBook: createBook, getBook: getBook, pushEntries: pushEntries,
+      createBook: createBook, setBookName: setBookName, profilePut: profilePut, profileGet: profileGet,
+      indexPut: indexPut, indexGet: indexGet, indexDelete: indexDelete, getBook: getBook, pushEntries: pushEntries,
       createInvite: createInvite, revokeInvites: revokeInvites, join: join,
       setRole: setRole, removeMember: removeMember, deleteBook: deleteBook
     };
@@ -260,6 +274,7 @@
   /* The database rules to paste into the Firebase console (also in README). */
   var RULES = {
     rules: {
+      users: { '$uid': { '.read': 'auth != null && auth.uid === $uid', '.write': 'auth != null && auth.uid === $uid' } },
       backups: { '$uid': { '.read': 'auth != null && auth.uid === $uid', '.write': 'auth != null && auth.uid === $uid' } },
       invites: { '$b': {
         '.read': "auth != null && root.child('books/'+$b+'/meta/owner').val() === auth.uid",

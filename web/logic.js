@@ -228,7 +228,9 @@
       id: x.id,
       role: x.role === 'owner' || x.role === 'edit' ? x.role : 'view',
       S: map(x.S, false), U: map(x.U, true),
-      last: typeof x.last === 'number' && isFinite(x.last) ? x.last : 0
+      last: typeof x.last === 'number' && isFinite(x.last) ? x.last : 0,
+      ix: x.ix === true,
+      nm: typeof x.nm === 'string' ? x.nm.slice(0, 40) : ''
     };
   }
 
@@ -271,6 +273,7 @@
         };
         var sy = sanitizeSync(b.sync);
         if (sy) nb.sync = sy;
+        else if (b.nolink === true) nb.nolink = true;
         books.push(nb);
       });
       if (books.length) {

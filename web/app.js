@@ -30,6 +30,14 @@
     return L.sanitizeState(null, { keepPin: true });
   }
 
+  /* small "pop" animation when a number changes */
+  function setVal(node, text) {
+    if (node.textContent === text) return;
+    var had = node.textContent !== '';
+    node.textContent = text;
+    if (had) { node.classList.remove('bump'); void node.offsetWidth; node.classList.add('bump'); }
+  }
+  function buzz() { try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) { /* ignore */ } }
   var rev = 0;                       // bumps on every local change (sync checks it)
   function saveRaw() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
@@ -529,7 +537,7 @@
   function renderBooks() {
     var sel = $('bookSelect');
     sel.textContent = '';
-    state.books.forEach(function (b) { sel.appendChild(option(b.id, (b.sync ? (b.sync.role === 'view' ? '\uD83D\uDC41 ' : '\uD83D\uDC65 ') : '') + b.name)); });
+    state.books.forEach(function (b) { sel.appendChild(option(b.id, (window.__bookIcon ? window.__bookIcon(b) : '') + b.name)); });
     sel.value = book().id;
   }
 
@@ -537,9 +545,9 @@
     var b = book();
     $('fab').classList.toggle('vo', !canEdit(b));
     var tot = L.totals(b.entries);
-    $('balance').textContent = money(tot.balance);
-    $('totalIn').textContent = money(tot.cashIn);
-    $('totalOut').textContent = money(tot.cashOut);
+    setVal($('balance'), money(tot.balance));
+    setVal($('totalIn'), money(tot.cashIn));
+    setVal($('totalOut'), money(tot.cashOut));
 
     var filters = { q: ui.q, type: ui.type, from: ui.from, to: ui.to };
     var shown = L.filterEntries(b.entries, filters).sort(function (a, c) {
@@ -558,10 +566,23 @@
 
     var list = $('list');
     list.textContent = '';
+    var dayNet = {}, lastDay = null, today = L.todayStr();
+    shown.forEach(function (e) { dayNet[e.date] = (dayNet[e.date] || 0) + (e.type === 'in' ? e.amount : -e.amount); });
     shown.forEach(function (e) {
+      if (e.date !== lastDay) {
+        lastDay = e.date;
+        var dh = el('li', 'dayhead');
+        var dl = el('span', null, fmtDate(e.date));
+        if (e.date === today) dl.appendChild(el('span', 'chip', t('today')));
+        dh.appendChild(dl);
+        var dn = dayNet[e.date];
+        dh.appendChild(el('span', 'dnet', (dn < 0 ? '\u2212' : '+') + money(Math.abs(dn))));
+        list.appendChild(dh);
+      }
       var li = el('li', 'item');
       li.tabIndex = 0;
       li.setAttribute('role', 'button');
+      li.appendChild(el('span', 'ico ' + e.type, e.type === 'in' ? '\u2193' : '\u2191'));
       var meta = el('div', 'meta');
       meta.appendChild(el('div', 'title', e.category || (e.type === 'in' ? t('cash_in') : t('cash_out'))));
       var bits = [fmtDate(e.date)];
@@ -613,9 +634,9 @@
     var entries = book().entries;
     $('monthLabel').textContent = cal().monthLabel(ui.month, state.settings.lang);
     var m = L.monthTotals(entries, ui.month, cal());
-    $('mIn').textContent = money(m.cashIn);
-    $('mOut').textContent = money(m.cashOut);
-    $('mNet').textContent = money(m.balance);
+    setVal($('mIn'), money(m.cashIn));
+    setVal($('mOut'), money(m.cashOut));
+    setVal($('mNet'), money(m.balance));
     renderBars($('catOut'), L.categoryTotals(entries, ui.month, 'out', cal()), 'out');
     renderBars($('catIn'), L.categoryTotals(entries, ui.month, 'in', cal()), 'in');
 
@@ -1493,6 +1514,7 @@
     if (!e) setTimeout(function () { $('amount').focus(); }, 50);
   }
 
+  $('fab').addEventListener('click', buzz);
   $('fab').addEventListener('click', function () {
     if (ui.view === 'projects') {
       var p = currentProject();
@@ -1614,6 +1636,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
     b.addEventListener('click', function () {
       var v = b.getAttribute('data-view');
+      buzz();
       showView(v);
       if (v === 'reports') renderReports();
       if (v === 'projects') renderProjects();
@@ -1668,15 +1691,22 @@
   });
   $('deleteBook').addEventListener('click', function () {
     if (state.books.length < 2) { toast(t('last_book')); return; }
+    function proceed() {
+      var cur = book().id;
+      dropPaymentsOfBook(cur);
+      deletePhotoIds(entryPhotoIds(book().entries));
+      state.books = state.books.filter(function (b) { return b.id !== cur; });
+      state.current = state.books[0].id;
+      save();
+      closeModal('bookModal');
+      renderAll();
+    }
+    if (book().sync && window.__cloudRelease) {          // also removes / leaves the online copy first
+      window.__cloudRelease(book()).then(function (ok) { if (ok) proceed(); });
+      return;
+    }
     if (!window.confirm(t('confirm_delete_book'))) return;
-    var cur = book().id;
-    dropPaymentsOfBook(cur);
-    deletePhotoIds(entryPhotoIds(book().entries));
-    state.books = state.books.filter(function (b) { return b.id !== cur; });
-    state.current = state.books[0].id;
-    save();
-    closeModal('bookModal');
-    renderAll();
+    proceed();
   });
 
   /* ---------- settings ---------- */
@@ -1848,7 +1878,7 @@
     reader.readAsText(file);
   });
 
-  /* ---------- online backup and shared books ---------- */
+  /* ---------- online sync (all books) and backup ---------- */
   (function () {
     var CS = window.CBSync;
     var CLOUD_KEY = 'cashbook.cloud.v1';   // sign-in and connection settings; never part of backups
@@ -1861,11 +1891,11 @@
       now: function () { return Date.now(); },
       defaults: window.CB_CLOUD_DEFAULTS || {}
     });
-    var info = {};            // shared book id -> { meta, members } from the last sync
+    var info = {};            // online book id -> { meta, members } from the last sync
     var invite = '';          // last invite text shown
     var busy = false, again = false, timer = 0, rulesShown = false, advanced = false;
-    var inviteRole = 'view';
-    var status = '';
+    var inviteRole = 'view', status = '', authMode = 'signin', profileOpen = false;
+    var draft = { name: '', phone: '', company: '', role: '' };
 
     function errText(e) {
       var c = (e && e.code) || 'x';
@@ -1876,64 +1906,157 @@
       return m ? t(m) : t('err_generic', { c: c });
     }
     function fail(e) { toast(errText(e)); status = errText(e); renderCloud(); }
-    function sharedBooks() { return state.books.filter(function (b) { return !!b.sync; }); }
     function ready() { return cloud.signedIn(); }
+    function linkedBooks() { return state.books.filter(function (b) { return !!b.sync; }); }
     function stamp(ms) { return ms ? new Date(ms).toLocaleString() : t('never'); }
-    function roleName(r) { return t(r === 'owner' ? 'role_owner' : r === 'edit' ? 'role_edit' : 'role_view'); }
+    function roleName(r) { return t(r === 'owner' ? 'role_owner' : r === 'edit' ? 'role_edit' : 'view' === r ? 'role_view' : 'role_view'); }
+    function roleOf(data) {
+      var me = cloud.cfg().uid;
+      if (!data || !data.meta) return null;
+      return data.meta.owner === me ? 'owner' : (data.members && data.members[me] && data.members[me].role) || null;
+    }
+    function others(id) { var i = info[id]; return i ? Object.keys(i.members || {}).length : 0; }
+
+    /* icon in front of the book name: cloud = only mine, people = shared, eye = view only, phone = not synced */
+    window.__bookIcon = function (b) {
+      if (!b.sync) return b.nolink ? '📱 ' : '';
+      if (b.sync.role === 'view') return '👁 ';
+      if (b.sync.role === 'edit') return '👥 ';
+      return others(b.sync.id) ? '👥 ' : '☁️ ';
+    };
+
+    /* ----- linking books to the online copy ----- */
+    function linkBook(b) {
+      var id = CS.newBookId();
+      return cloud.createBook(id, b.name).then(function () {
+        delete b.nolink;
+        b.sync = { id: id, role: 'owner', S: {}, U: {}, last: 0, ix: false };
+        saveRaw();
+      });
+    }
+    function ensureLinked() {
+      var chain = Promise.resolve(false);
+      state.books.slice().forEach(function (b) {
+        if (b.sync || b.nolink || !b.entries.length) return;       // empty books are linked when they get their first entry
+        chain = chain.then(function (ch) { return linkBook(b).then(function () { return true; }); });
+      });
+      return chain;
+    }
+    /* books of mine (and ones shared with me) that this phone does not have yet */
+    function pullIndex() {
+      return cloud.indexGet().then(function (idx) {
+        idx = idx || {};
+        var have = {}, added = false;
+        state.books.forEach(function (b) { if (b.sync) have[b.sync.id] = 1; });
+        var chain = Promise.resolve();
+        Object.keys(idx).filter(function (id) { return !have[id]; }).forEach(function (id) {
+          chain = chain.then(function () {
+            return cloud.getBook(id).catch(function (e) { if (e && e.code === 'permission') return null; throw e; }).then(function (data) {
+              var role = roleOf(data);
+              if (!role) return cloud.indexDelete(id);
+              info[id] = { meta: data.meta, members: data.members || {} };
+              var nb = { id: 'b' + L.newId(), name: String(data.meta.name || 'Book').slice(0, 40), projectId: '', entries: [],
+                         sync: { id: id, role: role, S: {}, U: {}, last: 0, ix: true } };
+              state.books.push(nb); added = true;
+            });
+          });
+        });
+        return chain.then(function () {
+          if (added && state.books.length > 1) {
+            // a brand-new phone starts with one empty "Main" book: drop it once real books arrived
+            var empties = state.books.filter(function (b) { return !b.sync && !b.nolink && !b.entries.length && !b.projectId; });
+            if (empties.length === 1 && state.books.filter(function (b) { return !b.sync; }).length === 1) {
+              state.books = state.books.filter(function (b) { return b !== empties[0]; });
+              if (!state.books.some(function (b) { return b.id === state.current; })) state.current = state.books[0].id;
+            }
+          }
+          if (added) saveRaw();
+          return added;
+        });
+      });
+    }
 
     /* ----- sync ----- */
     function syncBook(b) {
       var sy = b.sync, startRev = rev;
       return cloud.getBook(sy.id).catch(function (e) {
-        if (e && e.code === 'permission') return null;      // removed from the book, or the owner stopped sharing
+        if (e && e.code === 'permission') return null;      // removed from the book, or it was deleted online
         throw e;
       }).then(function (data) {
-        var me = cloud.cfg().uid;
-        var role = data && data.meta ? (data.meta.owner === me ? 'owner' : (data.members && data.members[me] && data.members[me].role) || null) : null;
+        var role = roleOf(data);
         if (!role) return { gone: true };
         info[sy.id] = { meta: data.meta, members: data.members || {} };
         var r = CS.merge({ local: b.entries, S: sy.S, U: sy.U, remote: data.entries || null, role: role, now: Date.now(), sanitize: L.sanitizeEntry });
-        return cloud.pushEntries(sy.id, r.push).then(function () {
+        var chain = cloud.pushEntries(sy.id, r.push);
+        var nameOnline = data.meta.name, renamed = false, adopt = '';
+        if (role === 'owner') {
+          if (b.name !== sy.nm && nameOnline !== b.name) { chain = chain.then(function () { return cloud.setBookName(sy.id, b.name); }); renamed = true; }   // renamed on this phone
+          else if (b.name === sy.nm && nameOnline && nameOnline !== b.name) adopt = nameOnline;                                                        // renamed on my other phone
+        } else if (nameOnline && nameOnline !== b.name) adopt = nameOnline;
+        if (!sy.ix || renamed) chain = chain.then(function () { return cloud.indexPut(sy.id, renamed ? b.name : (adopt || b.name), role); });
+        return chain.then(function () {
           if (rev !== startRev) { again = true; return { changed: false }; }   // edited meanwhile: merge again next round
           var changed = r.changed || sy.role !== role;
-          b.entries = r.entries; sy.S = r.S; sy.U = r.U; sy.role = role; sy.last = Date.now();
-          if (role !== 'owner' && data.meta.name && b.name !== data.meta.name) { b.name = data.meta.name; changed = true; }
+          b.entries = r.entries; sy.S = r.S; sy.U = r.U; sy.role = role; sy.last = Date.now(); sy.ix = true;
+          if (adopt) { b.name = adopt; changed = true; }
+          sy.nm = b.name;
           return { changed: changed };
         });
       });
     }
     function syncAll(manual) {
-      if (!ready() || !sharedBooks().length) { if (manual) { if (!ready()) toast(t('need_signin')); } return Promise.resolve(); }
+      if (!ready()) { if (manual) toast(t('need_signin')); return Promise.resolve(); }
       if (busy) { again = true; return Promise.resolve(); }
-      busy = true; again = false;
-      var books = sharedBooks(), changed = false, chain = Promise.resolve();
-      books.forEach(function (b) {
-        chain = chain.then(function () { return syncBook(b); }).then(function (r) {
-          if (r.gone) { toast(t('sync_gone', { n: b.name })); delete b.sync; changed = true; }
-          else if (r.changed) changed = true;
+      busy = true; again = false; dot('busy');
+      var changed = false;
+      return pullIndex().then(function (added) {
+        if (added) changed = true;
+        return ensureLinked();
+      }).then(function (linked) {
+        if (linked) changed = true;
+        var chain = Promise.resolve();
+        linkedBooks().forEach(function (b) {
+          chain = chain.then(function () { return syncBook(b); }).then(function (r) {
+            if (r.gone) {
+              toast(t('sync_gone', { n: b.name }));
+              var gid = b.sync.id; delete b.sync; b.nolink = true; changed = true;
+              cloud.indexDelete(gid).catch(function () { /* ignore */ });
+            } else if (r.changed) changed = true;
+          });
         });
-      });
-      return chain.then(function () {
-        busy = false; status = t('synced');
+        return chain;
+      }).then(function () {
+        busy = false; status = t('synced'); dot('ok');
         saveRaw();
         if (changed) renderAll(); else renderCloud();
         if (manual) toast(t('synced'));
         if (again) { again = false; schedule(300); }
-      }, function (e) { busy = false; if (manual) fail(e); else { status = errText(e); renderCloud(); } });
+      }, function (e) { busy = false; if (manual) fail(e); else { status = errText(e); renderCloud(); } dot('err'); });
     }
     function schedule(ms) {
-      if (!ready() || !sharedBooks().length) return;
+      if (!ready()) return;
       clearTimeout(timer);
       timer = setTimeout(function () { syncAll(false); }, ms == null ? 2500 : ms);
     }
     window.__scheduleSync = function () { schedule(); };
     window.__syncNow = function () { return syncAll(true); };
 
-    /* ----- backup ----- */
+    /* deleting a synced book also removes (owner) or leaves (member) the online copy, otherwise it would come back */
+    window.__cloudRelease = function (b) {
+      var owner = b.sync.role === 'owner';
+      if (!window.confirm(t(owner ? 'confirm_delete_book_online' : 'confirm_leave_delete'))) return Promise.resolve(false);
+      if (!ready()) { toast(t('need_signin')); return Promise.resolve(false); }
+      var id = b.sync.id, me = cloud.cfg().uid;
+      return (owner ? cloud.deleteBook(id) : cloud.removeMember(id, me)).then(function () {
+        return cloud.indexDelete(id);
+      }).then(function () { return true; }, function (e) { fail(e); return false; });
+    };
+
+    /* ----- backup of everything (also projects) ----- */
     function backupText() {
       var copy = JSON.parse(JSON.stringify(state));
       delete copy.settings.pinHash; delete copy.settings.pinSalt;
-      copy.books.forEach(function (b) { delete b.sync; });
+      copy.books.forEach(function (b) { delete b.sync; delete b.nolink; });
       return JSON.stringify(copy);
     }
     function backupNow(quiet) {
@@ -1951,22 +2074,13 @@
         var next = L.sanitizeState(parsed, { keepPin: false });
         next.settings.pinHash = state.settings.pinHash;
         next.settings.pinSalt = state.settings.pinSalt;
+        next.books.forEach(function (nb) { nb.nolink = true; });      // restored copies stay on this phone until you sync them again
         state = next; ui.projectId = ''; ui.month = cal().monthKey(L.todayStr());
         save(); renderAll(); toast(t('restored'));
       }).catch(fail);
     }
 
     /* ----- sharing ----- */
-    function shareCurrent() {
-      var b = book();
-      if (!ready()) { toast(t('need_signin')); return; }
-      var id = CS.newBookId();
-      cloud.createBook(id, b.name).then(function () {
-        b.sync = { id: id, role: 'owner', S: {}, U: {}, last: 0 };
-        save();
-        return syncAll(true).then(function () { renderAll(); });
-      }).catch(fail);
-    }
     function makeInvite() {
       var b = book();
       cloud.createInvite(b.sync.id, inviteRole).then(function (code) { invite = b.sync.id + '.' + code; renderCloud(); }).catch(fail);
@@ -1979,22 +2093,56 @@
       cloud.join(p.bookId, p.code, p.role).then(function () { return cloud.getBook(p.bookId); }).then(function (data) {
         if (!data || !data.meta) throw { code: 'permission' };
         var nb = { id: 'b' + L.newId(), name: String(data.meta.name || 'Shared').slice(0, 40), projectId: '', entries: [],
-                   sync: { id: p.bookId, role: p.role, S: {}, U: {}, last: 0 } };
+                   sync: { id: p.bookId, role: p.role, S: {}, U: {}, last: 0, ix: false } };
         state.books.push(nb); state.current = nb.id;
         save(); toast(t('joined', { n: nb.name }));
         return syncAll(false);
       }).then(function () { renderAll(); }).catch(function (e) { fail(e && e.code ? e : { code: 'permission' }); });
     }
-    function unlink(b) { delete b.sync; save(); renderAll(); }
+    function leaveBook(b) {
+      if (!window.confirm(t('confirm_leave'))) return;
+      var id = b.sync.id, me = cloud.cfg().uid;
+      cloud.removeMember(id, me).then(function () { return cloud.indexDelete(id); }).then(function () {
+        delete b.sync; b.nolink = true; save(); renderAll();
+      }, fail);
+    }
 
     /* ----- panel ----- */
-    function field(label, type, value, id) {
+    function field(label, type, value, id, ph) {
       var l = el('label', 'field'); l.appendChild(el('span', null, label));
       var i = document.createElement('input'); i.type = type; i.id = id; i.value = value || ''; i.autocomplete = 'off';
-      i.setAttribute('autocapitalize', 'off'); i.spellcheck = false;
+      i.setAttribute('autocapitalize', type === 'text' && /Name|Co|Job/.test(id) ? 'words' : 'off'); i.spellcheck = false;
+      if (ph) i.placeholder = ph;
       l.appendChild(i); return l;
     }
     function val(id) { var e = $(id); return e ? e.value.trim() : ''; }
+    function profileFields(P, p) {
+      P.appendChild(field(t('full_name'), 'text', p.name, 'pName'));
+      P.appendChild(field(t('phone'), 'tel', p.phone, 'pPhone'));
+      P.appendChild(field(t('company'), 'text', p.company, 'pCompany'));
+      P.appendChild(field(t('job_role'), 'text', p.role, 'pRole'));
+    }
+    function readProfile() { return { name: val('pName'), phone: val('pPhone'), company: val('pCompany'), role: val('pRole') }; }
+
+    function submitAuth() {
+      var c = cloud.cfg();
+      var db = CS.cleanDbUrl($('cDb') ? val('cDb') : c.dbUrl);
+      if (!db) { toast(t('bad_db_url')); return; }
+      var key = ($('cKey') ? val('cKey') : c.apiKey || '').replace(/["'\s,]/g, '');
+      var mail = val('cMail'), pw = $('cPass').value;
+      if (!key || !mail || !pw) { toast(t('need_config')); return; }
+      var prof = null;
+      if (authMode === 'signup') {
+        prof = readProfile(); draft = prof;
+        if (!prof.name) { toast(t('need_name')); $('pName').focus(); return; }
+        if (pw !== $('cPass2').value) { toast(t('pw_mismatch')); return; }
+      }
+      cloud.patchCfg({ dbUrl: db, apiKey: key, email: mail });
+      var p = authMode === 'signup'
+        ? cloud.signUp(mail, pw).then(function () { return cloud.profilePut(prof); })
+        : cloud.signIn(mail, pw).then(function () { return cloud.profileGet().catch(function () { return null; }); });
+      p.then(function () { status = ''; renderAll(); syncAll(false); backupNow(true); }, fail);
+    }
 
     function renderCloud() {
       var P = $('cloudPanel');
@@ -2002,46 +2150,71 @@
       if (P.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;   // do not disturb typing
       var c = cloud.cfg(), b = book();
       P.textContent = '';
-      P.appendChild(el('h2', null, t('cloud_title')));
+      P.appendChild(el('h2', null, '☁️ ' + t('cloud_title')));
       P.appendChild(el('p', 'muted small', t('cloud_intro')));
 
       if (!ready()) {
+        var tabs = el('div', 'seg');
+        [['signin', t('sign_in')], ['signup', t('sign_up')]].forEach(function (x) {
+          var bt = btn(x[1], authMode === x[0] ? 'on' : '', function () {
+            if ($('cMail')) cloud.patchCfg({ email: val('cMail') });
+            if ($('pName')) draft = readProfile();
+            authMode = x[0]; renderCloud();
+          });
+          tabs.appendChild(bt);
+        });
+        P.appendChild(tabs);
         P.appendChild(field(t('email'), 'email', c.email, 'cMail'));
         P.appendChild(field(t('password'), 'password', '', 'cPass'));
-        var row = el('div', 'row');
-        function auth(kind) {
-          return function () {
-            var db = CS.cleanDbUrl($('cDb') ? val('cDb') : c.dbUrl);
-            if (!db) { toast(t('bad_db_url')); return; }
-            var key = ($('cKey') ? val('cKey') : c.apiKey || '').replace(/["'\s,]/g, '');
-            if (!key || !val('cMail') || !val('cPass')) { toast(t('need_config')); return; }
-            cloud.patchCfg({ dbUrl: db, apiKey: key, email: val('cMail') });
-            cloud[kind](val('cMail'), $('cPass').value).then(function () { status = ''; renderAll(); syncAll(false); backupNow(true); }, fail);
-          };
+        if (authMode === 'signup') {
+          P.appendChild(field(t('confirm_password'), 'password', '', 'cPass2'));
+          P.appendChild(el('p', 'muted small', t('about_you')));
+          profileFields(P, draft);
         }
-        row.appendChild(btn(t('sign_in'), 'primary', auth('signIn')));
-        row.appendChild(btn(t('sign_up'), '', auth('signUp')));
-        P.appendChild(row);
+        P.appendChild(btn(authMode === 'signup' ? t('sign_up') : t('sign_in'), 'primary block', submitAuth));
         P.appendChild(btn(t('advanced'), 'block', function () { advanced = !advanced; renderCloud(); }));
         if (advanced) {
           P.appendChild(field(t('db_url'), 'url', c.dbUrl, 'cDb'));
           P.appendChild(field(t('api_key'), 'text', c.apiKey, 'cKey'));
         }
       } else {
-        P.appendChild(el('p', 'muted small', t('signed_in_as', { e: c.email || '' })));
+        var pr = c.profile || {};
+        var who = el('div', 'who');
+        who.appendChild(el('div', 'avatar', (pr.name || c.email || '?').trim().charAt(0).toUpperCase()));
+        var wt = el('div', 'whotext');
+        wt.appendChild(el('strong', null, pr.name || c.email || ''));
+        wt.appendChild(el('span', 'muted small', [pr.role, pr.company].filter(Boolean).join(' · ') || c.email || ''));
+        who.appendChild(wt);
+        P.appendChild(who);
+        if (!pr.name) { profileOpen = true; P.appendChild(el('p', 'muted small', t('complete_profile'))); }
+        P.appendChild(btn(t('my_profile'), 'block', function () { profileOpen = !profileOpen; renderCloud(); }));
+        if (profileOpen) {
+          profileFields(P, pr);
+          P.appendChild(btn(t('save'), 'primary block', function () {
+            var p2 = readProfile();
+            if (!p2.name) { toast(t('need_name')); return; }
+            cloud.profilePut(p2).then(function () { toast(t('profile_saved')); profileOpen = false; renderCloud(); }, fail);
+          }));
+        }
+
+        P.appendChild(el('p', 'muted small', t('all_books_synced', { n: linkedBooks().length })));
+        P.appendChild(btn(t('sync_now'), 'primary block', function () { syncAll(true); }));
         P.appendChild(btn(t('cloud_backup_now'), 'block', function () { backupNow(false); }));
         P.appendChild(btn(t('cloud_restore'), 'block', restoreNow));
         P.appendChild(el('p', 'muted small', t('cloud_last_backup', { t: stamp(c.lastBackup) })));
 
-        P.appendChild(el('h2', null, t('book_shared') + ': ' + b.name));
+        P.appendChild(el('h2', null, window.__bookIcon(b) + b.name));
         if (!b.sync) {
-          P.appendChild(btn(t('share_book'), 'block', shareCurrent));
+          P.appendChild(el('p', 'muted small', t(b.nolink ? 'book_local_only' : 'book_syncs_later')));
+          P.appendChild(btn(t('sync_this_book'), 'block', function () {
+            linkBook(b).then(function () { return syncAll(true); }).then(function () { renderAll(); }, fail);
+          }));
         } else {
           var sy = b.sync, inf = info[sy.id];
           P.appendChild(el('p', 'muted small', t('sharing_on', { r: roleName(sy.role) }) + ' · ' + t('last_sync', { t: stamp(sy.last) })));
           if (sy.role === 'view') P.appendChild(el('p', 'muted small', t('view_only_note')));
-          P.appendChild(btn(t('sync_now'), 'block', function () { syncAll(true); }));
           if (sy.role === 'owner') {
+            P.appendChild(el('h2', null, t('share_with')));
             var ir = el('label', 'field'); ir.appendChild(el('span', null, t('invite_as')));
             var rs = document.createElement('select');
             rs.appendChild(option('view', t('role_view'))); rs.appendChild(option('edit', t('role_edit')));
@@ -2061,31 +2234,23 @@
               cloud.revokeInvites(sy.id).then(function () { invite = ''; toast(t('invites_revoked')); renderCloud(); }, fail);
             }));
             if (inf) {
-              P.appendChild(el('h2', null, t('members')));
               var uids = Object.keys(inf.members);
-              if (!uids.length) P.appendChild(el('p', 'muted small', '—'));
+              if (uids.length) P.appendChild(el('h2', null, t('members')));
               uids.forEach(function (uid) {
                 var m = inf.members[uid], r2 = el('div', 'member');
-                r2.appendChild(el('span', null, m.email || uid));
+                r2.appendChild(el('span', null, m.name ? m.name + ' (' + (m.email || '') + ')' : (m.email || uid)));
                 var sel = document.createElement('select');
                 sel.appendChild(option('view', t('role_view'))); sel.appendChild(option('edit', t('role_edit'))); sel.value = m.role;
                 sel.addEventListener('change', function () { cloud.setRole(sy.id, uid, this.value).then(function () { m.role = sel.value; }, fail); });
                 r2.appendChild(sel);
                 r2.appendChild(btn(t('remove'), 'danger', function () {
-                  cloud.removeMember(sy.id, uid).then(function () { delete inf.members[uid]; renderCloud(); }, fail);
+                  cloud.removeMember(sy.id, uid).then(function () { delete inf.members[uid]; renderCloud(); renderBooks(); }, fail);
                 }));
                 P.appendChild(r2);
               });
             }
-            P.appendChild(btn(t('stop_sharing'), 'block danger', function () {
-              if (!window.confirm(t('confirm_stop_sharing'))) return;
-              cloud.deleteBook(sy.id).then(function () { invite = ''; unlink(b); }, fail);
-            }));
           } else {
-            P.appendChild(btn(t('leave_book'), 'block danger', function () {
-              if (!window.confirm(t('confirm_leave'))) return;
-              cloud.removeMember(sy.id, cloud.cfg().uid).then(function () { unlink(b); }, fail);
-            }));
+            P.appendChild(btn(t('leave_book'), 'block danger', function () { leaveBook(b); }));
           }
         }
 
@@ -2102,7 +2267,17 @@
         P.appendChild(ta);
       }
     }
-    window.__renderCloud = renderCloud;
+    window.__renderCloud = function () { renderCloud(); dot(); };
+
+    /* small status light in the header: green = synced, spinning = working, red = last attempt failed */
+    function dot(cls) {
+      var d = $('syncDot');
+      if (!d) return;
+      d.hidden = !ready();
+      if (cls) { d.className = 'sync ' + cls; d.setAttribute('title', cls === 'err' ? status : t('synced')); }
+      else if (!d.className || d.className === 'sync') d.className = 'sync ok';
+    }
+    $('syncDot').addEventListener('click', function () { syncAll(true); });
 
     /* ----- start: sync when the app opens / returns, then every 30 s ----- */
     function auto() { if (!document.hidden) syncAll(false); }

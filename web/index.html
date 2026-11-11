@@ -22,6 +22,7 @@
   <header class="top">
     <h1>CashBook</h1>
     <div class="bookbar">
+      <button type="button" id="syncDot" class="sync" aria-label="Sync" hidden></button>
       <select id="bookSelect" aria-label="Book"></select>
       <button type="button" id="bookBtn" class="icon" data-i18n-aria="books" aria-label="Books">⋮</button>
     </div>
@@ -86,6 +87,8 @@
 
     <!-- SETTINGS -->
     <section id="view-settings" class="view" hidden>
+      <div class="panel" id="cloudPanel"></div>
+
       <div class="panel">
         <label class="field"><span data-i18n="language">Language</span>
           <select id="langSel">
@@ -120,8 +123,6 @@
         </div>
         <p class="muted small" data-i18n="pin_note">The PIN is a simple lock for casual privacy.</p>
       </div>
-
-      <div class="panel" id="cloudPanel"></div>
 
       <div class="panel">
         <h2 data-i18n="data">Data</h2>
