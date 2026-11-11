@@ -413,3 +413,8 @@ main { padding-bottom: 170px; }
 #view-entries .panel input, #view-entries .panel select, #view-entries .panel button { padding-top: 8px; padding-bottom: 8px; }
 #view-entries .field { gap: 2px; font-size: .75rem; }
 #cloudPanel .seg button.on { background: var(--grad); color: #fff; box-shadow: 0 4px 12px rgba(90, 79, 240, .3); }
+
+.center { text-align: center; }
+button.google { background: #fff; color: #1f2340; border: 1.5px solid var(--border); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: var(--shadow-sm); }
+:root[data-theme="dark"] button.google { background: #fff; color: #1f2340; }
+button.google .gmark { font-size: 1.15rem; background: linear-gradient(90deg, #4285f4, #ea4335 40%, #fbbc05 70%, #34a853); -webkit-background-clip: text; background-clip: text; color: transparent; }

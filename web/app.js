@@ -2154,6 +2154,13 @@
       P.appendChild(el('p', 'muted small', t('cloud_intro')));
 
       if (!ready()) {
+        var D = window.CB_CLOUD_DEFAULTS || {};
+        if (window.AndroidBridge && window.AndroidBridge.googleSignIn && D.googleClientId) {
+          var gb = btn('', 'block google', function () { window.AndroidBridge.googleSignIn(D.googleClientId); });
+          gb.appendChild(el('b', 'gmark', 'G')); gb.appendChild(document.createTextNode(' ' + t('continue_google')));
+          P.appendChild(gb);
+          P.appendChild(el('p', 'muted small center', t('or_email')));
+        }
         var tabs = el('div', 'seg');
         [['signin', t('sign_in')], ['signup', t('sign_up')]].forEach(function (x) {
           var bt = btn(x[1], authMode === x[0] ? 'on' : '', function () {
@@ -2189,7 +2196,7 @@
         if (!pr.name) { profileOpen = true; P.appendChild(el('p', 'muted small', t('complete_profile'))); }
         P.appendChild(btn(t('my_profile'), 'block', function () { profileOpen = !profileOpen; renderCloud(); }));
         if (profileOpen) {
-          profileFields(P, pr);
+          profileFields(P, pr.name ? pr : draft);
           P.appendChild(btn(t('save'), 'primary block', function () {
             var p2 = readProfile();
             if (!p2.name) { toast(t('need_name')); return; }
@@ -2267,6 +2274,20 @@
         P.appendChild(ta);
       }
     }
+    /* result of the Android Google account chooser */
+    window.__onGoogle = function (token, err) {
+      if (err || !token) {
+        if (/Cancellation/.test(err || '')) return;
+        toast(/NoCredential/.test(err || '') ? t('google_no_account') : t('google_failed', { c: err || '?' }));
+        return;
+      }
+      cloud.signInGoogle(token).then(function (b) {
+        return cloud.profileGet().catch(function () { return null; }).then(function (p) {
+          if (!p) { draft = { name: b.displayName || '', phone: '', company: '', role: '' }; profileOpen = true; }
+          status = ''; renderAll(); syncAll(false); backupNow(true);
+        });
+      }, fail);
+    };
     window.__renderCloud = function () { renderCloud(); dot(); };
 
     /* small status light in the header: green = synced, spinning = working, red = last attempt failed */

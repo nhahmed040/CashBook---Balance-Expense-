@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.Environment;
 import android.print.PrintAttributes;
 import android.print.PrintManager;
@@ -22,6 +23,19 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.GetCredentialException;
+
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
+
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -30,7 +44,8 @@ import java.nio.file.Files;
 
 /**
  * Hosts the CashBook web app (bundled from /web) inside a WebView.
- * No internet permission is requested: everything runs offline.
+ * Everything runs offline. The Internet permission is only used by the optional online sync
+ * (Settings), and the page can ask for a Google sign-in token (Google blocks sign-in inside a WebView).
  */
 public class MainActivity extends Activity {
 
@@ -130,6 +145,53 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    /** Shows the Google account chooser and hands the Google ID token back to the page. */
+    private void startGoogleSignIn(final String clientId) {
+        runOnUiThread(() -> {
+            try {
+                CredentialManager manager = CredentialManager.create(MainActivity.this);
+                GetSignInWithGoogleOption option = new GetSignInWithGoogleOption.Builder(clientId).build();
+                GetCredentialRequest request = new GetCredentialRequest.Builder().addCredentialOption(option).build();
+                manager.getCredentialAsync(MainActivity.this, request, new CancellationSignal(),
+                        command -> runOnUiThread(command),
+                        new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                            @Override
+                            public void onResult(GetCredentialResponse result) {
+                                Credential credential = result.getCredential();
+                                if (credential instanceof CustomCredential
+                                        && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credential.getType())) {
+                                    try {
+                                        GoogleIdTokenCredential google =
+                                                GoogleIdTokenCredential.createFrom(((CustomCredential) credential).getData());
+                                        deliverGoogle(google.getIdToken(), "");
+                                    } catch (Exception e) {
+                                        deliverGoogle("", "bad-credential");
+                                    }
+                                } else {
+                                    deliverGoogle("", "unsupported");
+                                }
+                            }
+
+                            @Override
+                            public void onError(GetCredentialException e) {
+                                deliverGoogle("", e.getClass().getSimpleName());
+                            }
+                        });
+            } catch (Throwable t) {
+                deliverGoogle("", "failed");
+            }
+        });
+    }
+
+    private void deliverGoogle(String token, String error) {
+        final String js = "window.__onGoogle && window.__onGoogle(" + JSONObject.quote(token) + "," + JSONObject.quote(error) + ")";
+        runOnUiThread(() -> {
+            if (web != null) {
+                web.evaluateJavascript(js, null);
+            }
+        });
+    }
+
     private File photoFile(String id) {
         // Ids are plain numbers; anything else is refused so a page can never reach other files.
         if (id == null || !id.matches("[0-9]{1,20}")) {
@@ -187,6 +249,16 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception e) {
                 return "";
+            }
+        }
+
+        /** Starts the Google sign-in; the result comes back through window.__onGoogle(idToken, error). */
+        @android.webkit.JavascriptInterface
+        public void googleSignIn(String clientId) {
+            if (clientId != null && clientId.matches("[0-9A-Za-z._-]{10,200}")) {
+                startGoogleSignIn(clientId);
+            } else {
+                deliverGoogle("", "bad-client-id");
             }
         }
 

@@ -182,6 +182,11 @@
     function signUp(email, password) {
       return authCall('signUp', { email: email, password: password, returnSecureToken: true }).then(function (b) { return saveSession(b, email); });
     }
+    /* Google: the Android app obtains a Google ID token, Firebase turns it into our own session */
+    function signInGoogle(idToken) {
+      return authCall('signInWithIdp', { postBody: 'id_token=' + encodeURIComponent(idToken) + '&providerId=google.com', requestUri: 'http://localhost',
+        returnIdpCredential: true, returnSecureToken: true }).then(function (b) { saveSession(b, b.email); return b; });
+    }
     function signIn(email, password) {
       return authCall('signInWithPassword', { email: email, password: password, returnSecureToken: true }).then(function (b) { return saveSession(b, email); });
     }
@@ -262,7 +267,7 @@
     function deleteBook(id) { return db('DELETE', 'invites/' + id).then(function () { return db('DELETE', 'books/' + id); }); }   // invites first: their rule needs the book's owner
 
     return {
-      cfg: cfg, patchCfg: patchCfg, signUp: signUp, signIn: signIn, signOut: signOut, signedIn: signedIn,
+      cfg: cfg, patchCfg: patchCfg, signUp: signUp, signIn: signIn, signInGoogle: signInGoogle, signOut: signOut, signedIn: signedIn,
       backupPut: backupPut, backupGet: backupGet,
       createBook: createBook, setBookName: setBookName, profilePut: profilePut, profileGet: profileGet,
       indexPut: indexPut, indexGet: indexGet, indexDelete: indexDelete, getBook: getBook, pushEntries: pushEntries,

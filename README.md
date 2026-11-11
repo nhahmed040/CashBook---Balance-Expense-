@@ -88,3 +88,7 @@ To share a book: open it, Settings → **Share this book**, pick *View only* or 
 Notes: the free Firebase plan is plenty for cash books. Anyone with your database URL and key can try to create an account, so only give them to people you trust, and you can turn sign-ups off or delete users in the Firebase console. Online backup keeps the latest copy only.
 
 **Update the rules once more for v1.7:** replace the Realtime Database rules with the new `firebase-rules.json` (it adds the `users` section for profiles and the list of your books) and Publish. Without this, signing up works but profiles and syncing to a second phone are refused.
+
+## Google sign-in (Android app)
+
+"Continue with Google" appears on the sign-in screen in the Android app. It needs, in Firebase: Authentication → Sign-in method → **Google** enabled, and an **Android app** registered with package `com.nhahmed.cashbook` and the SHA-1 of `app/cashbook.keystore` (`keytool -list -v -keystore app/cashbook.keystore -alias cashbook -storepass cashbook-sideload`). The Web client ID of the Google provider is set in `web/cloud-config.js`. A Google account with the same email as an existing email/password account is the same account in CashBook. Phone (SMS) two-factor is not supported yet.
