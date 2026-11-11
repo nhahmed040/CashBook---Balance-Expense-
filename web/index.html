@@ -124,6 +124,8 @@
         <p class="muted small" data-i18n="pin_note">The PIN is a simple lock for casual privacy.</p>
       </div>
 
+      <button type="button" id="aboutBtn" class="block"><span aria-hidden="true">ℹ️</span> <span data-i18n="about">About</span></button>
+
       <div class="panel">
         <h2 data-i18n="data">Data</h2>
         <button type="button" id="backupBtn" class="block" data-i18n="backup">Backup all data</button>
@@ -186,6 +188,21 @@
       <button type="button" id="renameBook" class="block" data-i18n="rename_book">Rename</button>
       <button type="button" id="deleteBook" class="block danger" data-i18n="delete_book">Delete book</button>
       <button type="button" id="closeBook" class="block" data-i18n="close">Close</button>
+    </div>
+  </div>
+
+  <!-- About -->
+  <div id="aboutModal" class="overlay">
+    <div class="modal about">
+      <div class="aboutlogo">📒</div>
+      <h2>CashBook – Balance &amp; Expense</h2>
+      <dl class="aboutlist">
+        <div><dt data-i18n="app_version">Version</dt><dd id="aboutVersion"></dd></div>
+        <div><dt data-i18n="created_by">Created by</dt><dd>Nuh Ahmed</dd></div>
+        <div><dt data-i18n="email">Email</dt><dd><a href="mailto:nhahmed040@gmail.com">nhahmed040@gmail.com</a></dd></div>
+        <div><dt data-i18n="phone">Phone</dt><dd><a href="tel:+251912118081">+251912118081</a></dd></div>
+      </dl>
+      <button type="button" id="closeAbout" class="primary block" data-i18n="close">Close</button>
     </div>
   </div>
 

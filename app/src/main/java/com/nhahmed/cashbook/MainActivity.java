@@ -74,8 +74,17 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // Stay inside the bundled app; never navigate away.
-                return !request.getUrl().toString().startsWith("file:///android_asset/");
+                // Stay inside the bundled app; only phone and email links open the dialer / mail app.
+                String url = request.getUrl().toString();
+                if (url.startsWith("mailto:") || url.startsWith("tel:")) {
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, request.getUrl()));
+                    } catch (Exception e) {
+                        Toast.makeText(MainActivity.this, "No app found", Toast.LENGTH_SHORT).show();
+                    }
+                    return true;
+                }
+                return !url.startsWith("file:///android_asset/");
             }
         });
 

@@ -418,3 +418,12 @@ main { padding-bottom: 170px; }
 button.google { background: #fff; color: #1f2340; border: 1.5px solid var(--border); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: var(--shadow-sm); }
 :root[data-theme="dark"] button.google { background: #fff; color: #1f2340; }
 button.google .gmark { font-size: 1.15rem; background: linear-gradient(90deg, #4285f4, #ea4335 40%, #fbbc05 70%, #34a853); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* about */
+.about { text-align: center; align-items: center; }
+.aboutlogo { font-size: 3rem; width: 84px; height: 84px; border-radius: 26px; background: var(--grad); display: flex; align-items: center; justify-content: center; margin: 0 auto 4px; box-shadow: 0 10px 24px rgba(90, 79, 240, .35); }
+.aboutlist { margin: 6px 0 10px; text-align: left; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.aboutlist > div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--bg); border-radius: 12px; }
+.aboutlist dt { color: var(--muted); }
+.aboutlist dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; text-align: right; }
+.aboutlist a { color: var(--accent); text-decoration: none; }

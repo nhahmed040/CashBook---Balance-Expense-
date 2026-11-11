@@ -1669,6 +1669,12 @@
     renderAll();
   });
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
+
+  /* About */
+  var APP_VERSION = '1.9';
+  $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
+  $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
+  $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });
   $('bookModal').addEventListener('click', function (ev) { if (ev.target === this) closeModal('bookModal'); });
 
   $('newBook').addEventListener('click', function () {
