@@ -13,6 +13,8 @@ import android.os.CancellationSignal;
 import android.os.Environment;
 import android.print.PrintAttributes;
 import android.print.PrintManager;
+import android.database.Cursor;
+import android.provider.ContactsContract;
 import android.provider.MediaStore;
 import android.webkit.JsResult;
 import android.webkit.ValueCallback;
@@ -130,8 +132,31 @@ public class MainActivity extends Activity {
         web.loadUrl("file:///android_asset/index.html");
     }
 
+    private static final int REQ_PICK_CONTACT = 9102;
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_PICK_CONTACT) {
+            String name = "", phone = "";
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                // the picker grants read access to just the chosen contact: no contacts permission is needed
+                try (Cursor c = getContentResolver().query(data.getData(),
+                        new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER},
+                        null, null, null)) {
+                    if (c != null && c.moveToFirst()) {
+                        name = c.getString(0) == null ? "" : c.getString(0);
+                        phone = c.getString(1) == null ? "" : c.getString(1);
+                    }
+                } catch (Exception e) {
+                    name = "";
+                }
+            }
+            final String js = "window.__onPhoneContact && window.__onPhoneContact(" + JSONObject.quote(name) + "," + JSONObject.quote(phone) + ")";
+            if (web != null) {
+                web.evaluateJavascript(js, null);
+            }
+            return;
+        }
         if (requestCode == REQ_PICK_FILE) {
             if (filePathCallback != null) {
                 Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
@@ -227,6 +252,19 @@ public class MainActivity extends Activity {
         }
 
         /** Saves a binary file (an .xlsx workbook) given as base64. Returns where it went, or "". */
+        /** Opens the phone's contact picker; the choice comes back through window.__onPhoneContact(name, phone). */
+        @android.webkit.JavascriptInterface
+        public void pickContact() {
+            runOnUiThread(() -> {
+                try {
+                    Intent i = new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI);
+                    startActivityForResult(i, REQ_PICK_CONTACT);
+                } catch (Exception e) {
+                    web.evaluateJavascript("window.__onPhoneContact && window.__onPhoneContact('','')", null);
+                }
+            });
+        }
+
         @android.webkit.JavascriptInterface
         public String saveFileB64(String name, String mime, String base64) {
             String type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".equals(mime) ? mime : "application/octet-stream";

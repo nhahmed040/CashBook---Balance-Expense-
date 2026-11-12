@@ -33,7 +33,7 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 
 ## New in 2.0
 
-- **Contacts** (customers and suppliers): attach one to any entry, search entries by contact name or phone, and see each contact's running totals (money in, money out, net) in the Contacts tab
+- **Contacts** (customers and suppliers), picked from your phone book or typed in: attach one to any entry, search entries by contact name or phone, and see each contact's running totals (money in, money out, net) in the Contacts tab
 - **Entry filters** by contact, payment mode (cash, bank, mobile money, cheque), member (who recorded it) and category
 - **Businesses**: group books under several businesses, each with its own staff list and roles (manager, accountant, cashier, viewer)
 - **Reminders** for supplier bills (with an optional due date) and client certificates that are unpaid or overdue

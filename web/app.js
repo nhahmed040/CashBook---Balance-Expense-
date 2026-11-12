@@ -1728,13 +1728,38 @@
     state.contacts.slice().sort(function (a, c) { return a.name.localeCompare(c.name); }).forEach(function (c) {
       sel.appendChild(option(String(c.id), c.name + (c.phone ? ' · ' + c.phone : '')));
     });
+    if (hasPhoneBook) sel.appendChild(option('__phone', t('phonebook_opt')));
     sel.appendChild(option('__new', t('new_contact_opt')));
     sel.value = current && byId(state.contacts, current) ? String(current) : '';
     sel._prev = sel.value;
   }
 
+  /* ---- phone book (Android contact picker; there is none in a plain browser) ---- */
+  var hasPhoneBook = !!(window.AndroidBridge && typeof window.AndroidBridge.pickContact === 'function');
+  var phonePick = null;
+  function digits(v) { return String(v || '').replace(/\D/g, ''); }
+  function pickFromPhone(done) { phonePick = done; window.AndroidBridge.pickContact(); }
+  window.__onPhoneContact = function (name, phone) {
+    var cb = phonePick; phonePick = null;
+    if (!cb || !name) return;
+    var d = digits(phone), found = null;
+    if (d.length >= 7) state.contacts.forEach(function (c) { if (!found && digits(c.phone).slice(-9) === d.slice(-9)) found = c; });
+    if (!found) {
+      found = L.sanitizeContact({ id: L.newId(), name: name, phone: phone, kind: 'other' });
+      if (!found) return;
+      state.contacts.push(found);
+      save(); renderAll();
+    }
+    cb(found);
+  };
+
   $('contactSel').addEventListener('change', function () {
     var sel = this;
+    if (sel.value === '__phone') {
+      sel.value = sel._prev || '';
+      pickFromPhone(function (c) { fillContactSel(c.id); applyContactToParty(c); });
+      return;
+    }
     if (sel.value === '__new') {
       sel.value = sel._prev || '';
       editContact(null, function (c) { fillContactSel(c.id); applyContactToParty(c); });
@@ -1843,6 +1868,10 @@
   $('cq').addEventListener('input', function () { ui.cq = this.value; renderContacts(); });
   $('ckind').addEventListener('change', function () { ui.ckind = this.value; renderContacts(); });
   $('addContact').addEventListener('click', function () { editContact(null); });
+  $('pickContact').hidden = !hasPhoneBook;
+  $('pickContact').addEventListener('click', function () {
+    pickFromPhone(function (c) { toast(c.name); editContact(c); });
+  });
 
   /* ---------- businesses and staff ---------- */
   function renderBiz() {
@@ -2065,7 +2094,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.0.0';
+  var APP_VERSION = '2.0.1';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });

@@ -3,7 +3,7 @@
 (function () {
   var add = {
     en: {
-      more_filters: 'More filters (contact, mode, member, category)', contacts: 'Contacts', contact: 'Contact', add_contact: 'Add contact', edit_contact: 'Edit contact', search_contacts: 'Search name or phone',
+      from_phonebook: '📱 From phone book', phonebook_opt: '📱 From phone book…', more_filters: 'More filters (contact, mode, member, category)', contacts: 'Contacts', contact: 'Contact', add_contact: 'Add contact', edit_contact: 'Edit contact', search_contacts: 'Search name or phone',
       no_contacts: 'No contacts yet. Add customers and suppliers, then pick them on entries.', no_contact_opt: 'No contact', new_contact_opt: '➕ New contact…',
       all_contacts: 'All contacts', all_kinds: 'All types', kind_customer: 'Customer', kind_supplier: 'Supplier', kind_other: 'Other',
       contact_name: 'Name', contact_phone: 'Phone', contact_email: 'Email', contact_address: 'Address', contact_kind: 'Type', contact_note: 'Note',
