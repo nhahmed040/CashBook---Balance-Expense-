@@ -160,5 +160,30 @@
     return page(title, d.lang, h);
   }
 
-  return { esc: esc, certificateHtml: certificateHtml, statementHtml: statementHtml };
+  /* Cash report for a date range: totals, groups and the entry list. */
+  function reportHtml(d) {
+    var h = '<h1>' + esc(d.title) + '</h1><p class="sub">' + esc(d.periodLabel) + '</p>';
+    h += metaRows([[d.t('prepared'), d.date], [d.t('books'), d.scopeLabel]]);
+    h += '<table><tr class="total"><td>' + esc(d.t('cash_in')) + '</td><td class="n">' + esc(d.money(d.totals.cashIn)) + '</td></tr>' +
+      '<tr class="total"><td>' + esc(d.t('cash_out')) + '</td><td class="n">' + esc(d.money(d.totals.cashOut)) + '</td></tr>' +
+      '<tr class="total"><td>' + esc(d.t('balance')) + '</td><td class="n">' + esc(d.money(d.totals.balance)) + '</td></tr></table>';
+    d.groups.forEach(function (g) {
+      if (!g.rows.length) return;
+      h += '<h2>' + esc(g.title) + '</h2><table><thead><tr><th></th><th class="n">' + esc(d.t('cash_in')) + '</th><th class="n">' + esc(d.t('cash_out')) + '</th><th class="n">' + esc(d.t('net')) + '</th></tr></thead><tbody>';
+      g.rows.forEach(function (r) {
+        h += '<tr><td>' + esc(r[0]) + '</td><td class="n">' + esc(d.money(r[1])) + '</td><td class="n">' + esc(d.money(r[2])) + '</td><td class="n">' + esc(d.money(r[3])) + '</td></tr>';
+      });
+      h += '</tbody></table>';
+    });
+    h += '<h2>' + esc(d.t('entries')) + '</h2><table><thead><tr><th>' + esc(d.t('date')) + '</th><th>' + esc(d.t('category')) + ' / ' + esc(d.t('contact')) + '</th><th class="n">' + esc(d.t('cash_in')) + '</th><th class="n">' + esc(d.t('cash_out')) + '</th></tr></thead><tbody>';
+    d.entries.forEach(function (e) {
+      var sub = [e.party, e.mode ? d.t('mode_' + e.mode) : '', e.by, e.note].filter(Boolean).join(' · ');
+      h += '<tr><td>' + esc(d.fmt(e.date)) + '</td><td>' + esc(e.category || '') + (sub ? '<br><span class="note">' + esc(sub) + '</span>' : '') + '</td>' +
+        '<td class="n">' + (e.type === 'in' ? esc(d.money(e.amount)) : '') + '</td><td class="n">' + (e.type === 'out' ? esc(d.money(e.amount)) : '') + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    return page(d.title, d.lang, h);
+  }
+
+  return { esc: esc, certificateHtml: certificateHtml, statementHtml: statementHtml, reportHtml: reportHtml };
 });

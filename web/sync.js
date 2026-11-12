@@ -7,7 +7,7 @@
 })(this, function () {
   'use strict';
 
-  var FIELDS = ['type', 'amount', 'date', 'category', 'note', 'code', 'party'];
+  var FIELDS = ['type', 'amount', 'date', 'category', 'note', 'code', 'party', 'mode', 'by'];
 
   /* ---------- part 1: merge ---------- */
   function hash(text) {
@@ -43,7 +43,7 @@
       var id = Number(key), old = byId[id];
       var raw = { id: id };
       FIELDS.forEach(function (f) { raw[f] = r[f]; });
-      if (old) { raw.photos = old.photos; raw.billId = old.billId; raw.certId = old.certId; }
+      if (old) { raw.photos = old.photos; raw.billId = old.billId; raw.certId = old.certId; raw.contactId = old.contactId; }
       var e = a.sanitize(raw);
       if (!e) return null;
       e.id = id;

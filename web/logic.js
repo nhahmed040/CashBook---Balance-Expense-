@@ -9,6 +9,9 @@
   var CURRENCIES = ['ETB', 'USD', 'EUR', 'GBP', 'KES', 'SAR', 'AED', 'none'];
   var THEMES = ['system', 'light', 'dark'];
   var CALENDARS = ['gregorian', 'ethiopian'];
+  var MODES = ['cash', 'bank', 'mobile', 'cheque', 'other'];
+  var KINDS = ['customer', 'supplier', 'other'];
+  var STAFF_ROLES = ['manager', 'accountant', 'cashier', 'viewer'];
   var CODES = ['materials', 'labour', 'equipment', 'subcontract', 'transport', 'fuel', 'permits', 'overhead', 'other'];
 
   var idCounter = 0;
@@ -80,10 +83,41 @@
       party: str(e.party, 60),
       billId: validId(e.billId) ? e.billId : 0,
       certId: validId(e.certId) ? e.certId : 0,
-      photos: photoIds(e.photos)
+      photos: photoIds(e.photos),
+      mode: MODES.indexOf(e.mode) >= 0 ? e.mode : '',
+      by: str(e.by, 40),
+      contactId: validId(e.contactId) ? e.contactId : 0
     };
   }
   function uniqueEntries(list) { return mapList(list, sanitizeEntry); }
+
+  /* ---------- contacts and businesses ---------- */
+  function sanitizeContact(c) {
+    if (!c || typeof c !== 'object') return null;
+    var name = str(c.name, 60);
+    if (!name) return null;
+    return {
+      id: validId(c.id) ? c.id : newId(),
+      name: name,
+      phone: str(c.phone, 30),
+      email: str(c.email, 60),
+      address: str(c.address, 80),
+      kind: KINDS.indexOf(c.kind) >= 0 ? c.kind : 'other',
+      note: str(c.note, 80)
+    };
+  }
+  function sanitizeStaff(m) {
+    if (!m || typeof m !== 'object') return null;
+    var name = str(m.name, 60);
+    if (!name) return null;
+    return { id: validId(m.id) ? m.id : newId(), name: name, phone: str(m.phone, 30), role: STAFF_ROLES.indexOf(m.role) >= 0 ? m.role : 'cashier' };
+  }
+  function sanitizeBusiness(b) {
+    if (!b || typeof b !== 'object') return null;
+    var name = str(b.name, 40);
+    if (!name) return null;
+    return { id: str(b.id, 40) || ('biz' + newId()), name: name, staff: mapList(b.staff, sanitizeStaff, 200) };
+  }
 
   /* ---------- project parts ---------- */
   function sanitizePayment(p) {
@@ -109,10 +143,21 @@
       supplier: str(b.supplier, 60),
       code: CODES.indexOf(b.code) >= 0 ? b.code : 'other',
       desc: str(b.desc, 80),
+      due: isDate(b.due) ? b.due : '',
       amount: round2(a),
       payments: mapList(b.payments, sanitizePayment, 500),
       photos: photoIds(b.photos)
     };
+  }
+
+  /* BoQ quantities done at the time a certificate was made: { itemId: qty }. */
+  function sanitizeSnap(m) {
+    var out = {}, n = 0;
+    if (m && typeof m === 'object') Object.keys(m).forEach(function (k) {
+      var v = Number(m[k]);
+      if (n < 3000 && /^\d{1,20}$/.test(k) && isFinite(v) && v > 0) { out[k] = round3(v); n++; }
+    });
+    return out;
   }
 
   function sanitizeCert(c) {
@@ -125,7 +170,8 @@
       date: isDate(c.date) ? c.date : todayStr(),
       gross: round2(g),
       advanceRecovery: num(c.advanceRecovery, 0),
-      receipts: mapList(c.receipts, sanitizePayment, 500)
+      receipts: mapList(c.receipts, sanitizePayment, 500),
+      snap: sanitizeSnap(c.snap)
     };
   }
 
@@ -192,6 +238,9 @@
       wht: num(p.wht, 0, 100),
       retention: num(p.retention, 0, 100),
       advance: num(p.advance, 0),
+      variation: num(p.variation, 0),
+      rebate: num(p.rebate, 0, 100),
+      contractor: str(p.contractor, 60),
       budgets: budgets,
       bills: mapList(p.bills, sanitizeBill, 5000),
       certs: mapList(p.certs, sanitizeCert, 1000),
@@ -208,8 +257,11 @@
       v: 3,
       current: 'main',
       settings: { lang: 'en', currency: 'ETB', theme: 'system', calendar: 'gregorian', pinHash: '', pinSalt: '' },
-      books: [{ id: 'main', name: 'Main', projectId: '', entries: [] }],
-      projects: []
+      books: [{ id: 'main', name: 'Main', projectId: '', businessId: '', entries: [] }],
+      projects: [],
+      contacts: [],
+      businesses: [],
+      business: ''
     };
   }
 
@@ -257,6 +309,18 @@
       projects.push(p);
     });
     s.projects = projects;
+    s.contacts = mapList(raw.contacts, sanitizeContact, 2000);
+    var biz = [], bSeen = {};
+    (Array.isArray(raw.businesses) ? raw.businesses : []).slice(0, 20).forEach(function (rb) {
+      var b = sanitizeBusiness(rb);
+      if (!b) return;
+      while (bSeen[b.id]) b.id = b.id + '_';
+      bSeen[b.id] = true; biz.push(b);
+    });
+    s.businesses = biz;
+    s.business = typeof raw.business === 'string' && bSeen[raw.business] ? raw.business : '';
+    var cIds = {};
+    s.contacts.forEach(function (c) { cIds[c.id] = true; });
 
     if (Array.isArray(raw.books)) {
       var books = [], seenIds = {};
@@ -269,7 +333,8 @@
           id: id,
           name: str(b.name, 40) || ('Book ' + (books.length + 1)),
           projectId: pIds[b.projectId] ? b.projectId : '',
-          entries: uniqueEntries(b.entries)
+          businessId: bSeen[b.businessId] ? b.businessId : '',
+          entries: uniqueEntries(b.entries).map(function (e) { if (e.contactId && !cIds[e.contactId]) e.contactId = 0; return e; })
         };
         var sy = sanitizeSync(b.sync);
         if (sy) nb.sync = sy;
@@ -409,8 +474,73 @@
       if (f && f.type && f.type !== 'all' && e.type !== f.type) return false;
       if (f && f.from && e.date < f.from) return false;
       if (f && f.to && e.date > f.to) return false;
-      if (q && (e.category + ' ' + e.note + ' ' + e.party).toLowerCase().indexOf(q) < 0) return false;
+      if (f && f.mode && e.mode !== f.mode) return false;
+      if (f && f.by && e.by !== f.by) return false;
+      if (f && f.category && e.category !== f.category) return false;
+      if (f && f.contactId && e.contactId !== f.contactId) return false;
+      if (q) {
+        var hay = (e.category + ' ' + e.note + ' ' + e.party + ' ' + e.by + ' ' + (e.mode || '')).toLowerCase();
+        if (f && f.contactText) hay += ' ' + f.contactText(e);
+        if (hay.indexOf(q) < 0) return false;
+      }
       return true;
+    });
+  }
+
+  /* Running totals per contact over every book: money received from / paid to them. */
+  function contactBalances(state) {
+    var map = {};
+    state.contacts.forEach(function (c) { map[c.id] = { cashIn: 0, cashOut: 0, net: 0, count: 0, last: '' }; });
+    state.books.forEach(function (b) {
+      b.entries.forEach(function (e) {
+        var m = e.contactId && map[e.contactId];
+        if (!m) return;
+        if (e.type === 'in') m.cashIn = round2(m.cashIn + e.amount); else m.cashOut = round2(m.cashOut + e.amount);
+        m.net = round2(m.cashIn - m.cashOut);
+        m.count++;
+        if (e.date > m.last) m.last = e.date;
+      });
+    });
+    return map;
+  }
+
+  /* All entries of the given books (or all books) inside a date range, newest last, with the book name. */
+  function rangeEntries(state, from, to, bookIds) {
+    var out = [];
+    state.books.forEach(function (b) {
+      if (bookIds && bookIds.indexOf(b.id) < 0) return;
+      filterEntries(b.entries, { from: from, to: to }).forEach(function (e) {
+        var c = {}; Object.keys(e).forEach(function (k) { c[k] = e[k]; });
+        c.bookId = b.id; c.book = b.name; out.push(c);
+      });
+    });
+    return out.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+  }
+
+  /* Unpaid supplier bills and unpaid certificates, most urgent first.
+     due: bill.due when set. level: overdue | soon (within `days`) | later | none. */
+  function reminders(state, today, days) {
+    var out = [];
+    var soon = new Date(today + 'T00:00:00Z').getTime() + (days == null ? 7 : days) * 86400000;
+    state.projects.forEach(function (p) {
+      p.bills.forEach(function (b) {
+        var bal = billBalance(b);
+        if (bal <= 0) return;
+        var level = 'none';
+        if (b.due) {
+          var t = new Date(b.due + 'T00:00:00Z').getTime();
+          level = b.due < today ? 'overdue' : t <= soon ? 'soon' : 'later';
+        }
+        out.push({ kind: 'bill', projectId: p.id, project: p.name, id: b.id, who: b.supplier, desc: b.desc, due: b.due, amount: bal, level: level });
+      });
+      p.certs.forEach(function (c) {
+        var bal = certCalc(p, c).balance;
+        if (bal > 0) out.push({ kind: 'cert', projectId: p.id, project: p.name, id: c.id, who: c.no, desc: '', due: '', amount: bal, level: 'none' });
+      });
+    });
+    var rank = { overdue: 0, soon: 1, later: 2, none: 3 };
+    return out.sort(function (a, b) {
+      return rank[a.level] - rank[b.level] || (a.due < b.due ? -1 : a.due > b.due ? 1 : 0) || b.amount - a.amount;
     });
   }
 
@@ -635,6 +765,79 @@
     return { previous: prev, cumulative: cum === null ? prev : cum };
   }
 
+  /* ---------- progress per certificate (for Excel export) ---------- */
+  function boqSnapshot(project) {
+    var m = {};
+    project.boq.forEach(function (i) { if (i.done > 0) m[i.id] = i.done; });
+    return m;
+  }
+  function sortedCerts(project) {
+    return project.certs.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+  }
+  /* Rows { item, prev, cur, total } for the BoQ. certId null = "now" (live quantities done, against the last certificate). */
+  function boqProgress(project, certId) {
+    var list = sortedCerts(project), idx = -1;
+    list.forEach(function (c, k) { if (c.id === certId) idx = k; });
+    var totalMap, prevMap;
+    if (idx < 0) {
+      totalMap = boqSnapshot(project);
+      prevMap = list.length ? list[list.length - 1].snap : {};
+    } else {
+      var c = list[idx];
+      totalMap = Object.keys(c.snap || {}).length ? c.snap : (idx === list.length - 1 ? boqSnapshot(project) : (idx > 0 ? list[idx - 1].snap : {}));
+      prevMap = idx > 0 ? list[idx - 1].snap : {};
+    }
+    return project.boq.map(function (item) {
+      var total = totalMap[item.id] || 0, prev = prevMap[item.id] || 0;
+      if (prev > total) prev = total;
+      return { item: item, prev: prev, cur: round3(total - prev), total: total };
+    });
+  }
+
+  /* Sections for the summary: a heading with no number (or "2." / "A.") starts a section.
+     "A. SUBSTRUCTURE" style headings (letter + dot) are groups of sections. */
+  function boqSections(project) {
+    var sections = [], cur = null;
+    project.boq.forEach(function (i, idx) {
+      if (isHeading(i) && (!i.no || /^(\d+|[A-Za-z])\.?$/.test(i.no))) {
+        var group = /^[A-Za-z]\.\s/.test(i.desc) || /^[A-Za-z]\.?$/.test(i.no || '');
+        cur = { title: (i.no && !/^[A-Za-z]\.?$/.test(i.no) ? i.no.replace(/\.?$/, '.') + ' ' : '') + i.desc, group: group, from: idx, to: idx, items: [] };
+        sections.push(cur);
+      } else {
+        if (!cur) { cur = { title: 'Items', group: false, from: idx, to: idx, items: [] }; sections.push(cur); }
+        cur.items.push(idx); cur.to = idx;
+      }
+    });
+    return sections;
+  }
+
+  /* Amount in words, e.g. "Four Million five hundred seventy six thousand ... and 48/100 Birr only". */
+  function amountWords(n, unit) {
+    n = Math.abs(round2(n));
+    var whole = Math.floor(n), cents = Math.round((n - whole) * 100);
+    var ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    var tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    function below1000(x) {
+      var out = [];
+      if (x >= 100) { out.push(ones[Math.floor(x / 100)] + ' hundred'); x %= 100; }
+      if (x >= 20) { out.push(tens[Math.floor(x / 10)] + (x % 10 ? '-' + ones[x % 10] : '')); }
+      else if (x > 0) out.push(ones[x]);
+      return out.join(' ');
+    }
+    var words;
+    if (whole === 0) words = 'zero';
+    else {
+      var scales = [[1e12, 'trillion'], [1e9, 'billion'], [1e6, 'million'], [1e3, 'thousand']], parts = [], rest = whole;
+      scales.forEach(function (sc) {
+        if (rest >= sc[0]) { parts.push(below1000(Math.floor(rest / sc[0])) + ' ' + sc[1]); rest = rest % sc[0]; }
+      });
+      if (rest > 0) parts.push(below1000(rest));
+      words = parts.join(' ');
+    }
+    words = words.charAt(0).toUpperCase() + words.slice(1);
+    return words + (cents ? ' and ' + String(cents).padStart(2, '0') + '/100' : '') + ' ' + (unit || 'Birr') + ' only';
+  }
+
   function boqCsv(project) {
     var rows = [['No', 'Description', 'Unit', 'Qty', 'Rate', 'Amount', 'Done', 'Value done', 'Done %']];
     project.boq.forEach(function (i) {
@@ -680,6 +883,9 @@
   }
 
   return {
+    MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,
+    sanitizeContact: sanitizeContact, sanitizeBusiness: sanitizeBusiness, contactBalances: contactBalances,
+    rangeEntries: rangeEntries, reminders: reminders,
     LANGS: LANGS, CURRENCIES: CURRENCIES, THEMES: THEMES, CALENDARS: CALENDARS, CODES: CODES,
     newId: newId, todayStr: todayStr, isDate: isDate, round2: round2,
     sanitizeEntry: sanitizeEntry, sanitizeState: sanitizeState, defaultState: defaultState, migrateOld: migrateOld,
@@ -694,6 +900,7 @@
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
     sanitizeBoqItem: sanitizeBoqItem, itemAmount: itemAmount, itemEarned: itemEarned, isHeading: isHeading,
     boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
+    boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds
   };
 });

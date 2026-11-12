@@ -221,13 +221,29 @@ public class MainActivity extends Activity {
          */
         @android.webkit.JavascriptInterface
         public String saveFile(String name, String mime, String content) {
-            String safe = name == null ? "cashbook.txt" : name.replaceAll("[^A-Za-z0-9._-]", "_");
-            if (safe.isEmpty()) {
-                safe = "cashbook.txt";
-            }
             String type = "application/json".equals(mime) || "text/csv".equals(mime) ? mime : "text/plain";
+            byte[] data = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+            return writeDownload(name, type, data, "cashbook.txt");
+        }
+
+        /** Saves a binary file (an .xlsx workbook) given as base64. Returns where it went, or "". */
+        @android.webkit.JavascriptInterface
+        public String saveFileB64(String name, String mime, String base64) {
+            String type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".equals(mime) ? mime : "application/octet-stream";
             try {
-                byte[] data = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+                byte[] data = android.util.Base64.decode(base64 == null ? "" : base64, android.util.Base64.DEFAULT);
+                return writeDownload(name, type, data, "cashbook.xlsx");
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        private String writeDownload(String name, String type, byte[] data, String fallbackName) {
+            String safe = name == null ? fallbackName : name.replaceAll("[^A-Za-z0-9._-]", "_");
+            if (safe.isEmpty()) {
+                safe = fallbackName;
+            }
+            try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentResolver resolver = getContentResolver();
                     ContentValues values = new ContentValues();

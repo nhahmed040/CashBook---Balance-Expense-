@@ -13,7 +13,7 @@
   var state = loadState();
   var ui = {
     view: 'entries',
-    q: '', type: 'all', from: '', to: '',
+    q: '', type: 'all', from: '', to: '', mode: '', by: '', category: '', contactId: 0, cq: '', ckind: 'all', rFrom: '', rTo: '', rScope: 'book',
     month: CAL.get(state.settings.calendar).monthKey(L.todayStr()),
     editingId: null,
     projectId: '', section: 'overview',
@@ -203,6 +203,8 @@
     makeDate($('date'), false);
     makeDate($('fromDate'), true);
     makeDate($('toDate'), true);
+    makeDate($('rFrom'), true);
+    makeDate($('rTo'), true);
   }
 
   /* ---------- small helpers ---------- */
@@ -534,11 +536,53 @@
   }
 
   /* ---------- rendering: books / entries ---------- */
+  function visibleBooks() {
+    if (!state.business) return state.books;
+    var list = state.books.filter(function (b) { return b.businessId === state.business; });
+    return list.length ? list : state.books;
+  }
+
   function renderBooks() {
     var sel = $('bookSelect');
     sel.textContent = '';
-    state.books.forEach(function (b) { sel.appendChild(option(b.id, (window.__bookIcon ? window.__bookIcon(b) : '') + b.name)); });
+    var bs = $('bizSelect');
+    bs.textContent = '';
+    bs.hidden = !state.businesses.length;
+    if (state.businesses.length) {
+      bs.appendChild(option('', t('all_businesses')));
+      state.businesses.forEach(function (x) { bs.appendChild(option(x.id, x.name)); });
+      if (!byId(state.businesses, state.business)) state.business = '';
+      bs.value = state.business;
+    }
+    var shown = visibleBooks();
+    if (!shown.some(function (b) { return b.id === state.current; })) state.current = shown[0].id;
+    shown.forEach(function (b) { sel.appendChild(option(b.id, (window.__bookIcon ? window.__bookIcon(b) : '') + b.name)); });
     sel.value = book().id;
+  }
+
+  function fillSelect(sel, first, items, current) {
+    sel.textContent = '';
+    sel.appendChild(option('', first));
+    items.forEach(function (i) { sel.appendChild(option(i[0], i[1])); });
+    sel.value = current != null && current !== 0 && sel.querySelector('option[value="' + String(current).replace(/"/g, '') + '"]') ? String(current) : '';
+  }
+
+  function fillFilters(b) {
+    var ids = {}, cats = {}, bys = {};
+    b.entries.forEach(function (e) {
+      if (e.contactId) ids[e.contactId] = true;
+      if (e.category) cats[e.category] = true;
+      if (e.by) bys[e.by] = true;
+    });
+    var cs = state.contacts.filter(function (c) { return ids[c.id]; }).map(function (c) { return [String(c.id), c.name]; });
+    fillSelect($('contactFilter'), t('all_contacts'), cs, ui.contactId);
+    ui.contactId = Number($('contactFilter').value) || 0;
+    fillSelect($('modeFilter'), t('all_modes'), L.MODES.map(function (m) { return [m, t('mode_' + m)]; }), ui.mode);
+    ui.mode = $('modeFilter').value;
+    fillSelect($('byFilter'), t('all_members'), Object.keys(bys).sort().map(function (x) { return [x, x]; }), ui.by);
+    ui.by = $('byFilter').value;
+    fillSelect($('catFilter'), t('all_categories'), Object.keys(cats).sort().map(function (x) { return [x, x]; }), ui.category);
+    ui.category = $('catFilter').value;
   }
 
   function renderEntries() {
@@ -549,12 +593,17 @@
     setVal($('totalIn'), money(tot.cashIn));
     setVal($('totalOut'), money(tot.cashOut));
 
-    var filters = { q: ui.q, type: ui.type, from: ui.from, to: ui.to };
+    fillFilters(b);
+    var filters = {
+      q: ui.q, type: ui.type, from: ui.from, to: ui.to, mode: ui.mode, by: ui.by, category: ui.category, contactId: ui.contactId,
+      contactText: function (e) { var c = e.contactId ? byId(state.contacts, e.contactId) : null; return c ? (c.name + ' ' + c.phone + ' ' + c.email).toLowerCase() : ''; }
+    };
     var shown = L.filterEntries(b.entries, filters).sort(function (a, c) {
       return a.date < c.date ? 1 : a.date > c.date ? -1 : c.id - a.id;
     });
 
-    var active = !!(ui.q || ui.type !== 'all' || ui.from || ui.to);
+    var active = !!(ui.q || ui.type !== 'all' || ui.from || ui.to || ui.mode || ui.by || ui.category || ui.contactId);
+    if (ui.mode || ui.by || ui.category || ui.contactId) $('moreFilters').open = true;
     var ft = $('filterTotals');
     if (active) {
       var s = L.totals(shown);
@@ -588,6 +637,8 @@
       var bits = [fmtDate(e.date)];
       if (e.code) bits.push(codeLabel(e.code));
       if (e.party) bits.push(e.party);
+      if (e.mode) bits.push(t('mode_' + e.mode));
+      if (e.by) bits.push('👤 ' + e.by);
       if (e.note) bits.push(e.note);
       if (e.photos && e.photos.length) bits.push('📷' + e.photos.length);
       meta.appendChild(el('div', 'detail', bits.join(' · ')));
@@ -637,6 +688,7 @@
     setVal($('mIn'), money(m.cashIn));
     setVal($('mOut'), money(m.cashOut));
     setVal($('mNet'), money(m.balance));
+    initExportPanel();
     renderBars($('catOut'), L.categoryTotals(entries, ui.month, 'out', cal()), 'out');
     renderBars($('catIn'), L.categoryTotals(entries, ui.month, 'in', cal()), 'in');
 
@@ -827,6 +879,9 @@
     if (p.boq.length) row.appendChild(btn(t('export_boq'), '', function () {
       saveFile('cashbook-boq-' + safeName(p.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.boqCsv(p));
     }));
+    if (p.boq.length) row.appendChild(btn(t('export_boq_xlsx'), '', function () {
+      saveWorkbook('Summary-BOQ-' + safeName(p.name), window.CBExcel.boqWorkbook(p));
+    }));
     if (differs) row.appendChild(btn(t('set_contract_from_boq'), '', function () { p.contractSum = s.total; save(); renderAll(); }));
     body.appendChild(row);
     body.appendChild(el('p', 'note', t('boq_csv_note')));
@@ -975,11 +1030,14 @@
       { key: 'name', label: t('proj_name'), type: 'text', value: p.name, required: true },
       { key: 'client', label: t('client_name'), type: 'text', value: p.client },
       { key: 'location', label: t('location'), type: 'text', value: p.location },
+      { key: 'contractor', label: t('contractor_name'), type: 'text', value: p.contractor },
       { key: 'contractSum', label: t('contract_sum'), type: 'number', min: 0, value: p.contractSum || '' },
       { key: 'advance', label: t('advance_paid'), type: 'number', min: 0, value: p.advance || '' },
       { key: 'vat', label: t('vat_pct'), type: 'number', min: 0, max: 100, value: p.vat },
       { key: 'wht', label: t('wht_pct'), type: 'number', min: 0, max: 100, value: p.wht },
       { key: 'retention', label: t('retention_pct'), type: 'number', min: 0, max: 100, value: p.retention },
+      { key: 'variation', label: t('variation_total'), type: 'number', min: 0, value: p.variation || '' },
+      { key: 'rebate', label: t('rebate_pct'), type: 'number', min: 0, max: 100, value: p.rebate || '' },
       { key: 'startDate', label: t('start_date'), type: 'date', value: p.startDate },
       { key: 'endDate', label: t('end_date'), type: 'date', value: p.endDate }
     ];
@@ -989,6 +1047,7 @@
     p.contractSum = Math.max(0, L.round2(v.contractSum)); p.advance = Math.max(0, L.round2(v.advance));
     p.vat = Math.min(100, Math.max(0, L.round2(v.vat))); p.wht = Math.min(100, Math.max(0, L.round2(v.wht)));
     p.retention = Math.min(100, Math.max(0, L.round2(v.retention)));
+    p.contractor = v.contractor.slice(0, 60); p.variation = Math.max(0, L.round2(v.variation)); p.rebate = Math.min(100, Math.max(0, L.round2(v.rebate)));
     p.startDate = L.isDate(v.startDate) ? v.startDate : '';
     p.endDate = L.isDate(v.endDate) ? v.endDate : '';
   }
@@ -1060,7 +1119,7 @@
 
   function editBill(p, bill) {
     var isNew = !bill;
-    var b = bill || { date: L.todayStr(), supplier: '', code: 'materials', desc: '', amount: '' };
+    var b = bill || { date: L.todayStr(), supplier: '', code: 'materials', desc: '', amount: '', due: '' };
     var pst = newPhotoState(bill ? bill.photos : []);
     openForm({
       title: isNew ? t('add_bill') : t('edit_bill'),
@@ -1070,17 +1129,19 @@
         { key: 'code', label: t('cost_code'), type: 'select', options: codeOptions(), value: b.code },
         { key: 'desc', label: t('description'), type: 'text', value: b.desc, max: 80 },
         { key: 'amount', label: t('bill_amount'), type: 'number', min: 0.01, value: b.amount, required: true },
+        { key: 'due', label: t('due_date'), type: 'date', value: b.due || '' },
         { key: 'photos', type: 'photos', state: pst }
       ],
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
         if (isNew) {
-          var nb = L.sanitizeBill({ date: date, supplier: v.supplier, code: v.code, desc: v.desc, amount: v.amount, photos: pst.ids });
+          var nb = L.sanitizeBill({ date: date, supplier: v.supplier, code: v.code, desc: v.desc, amount: v.amount, due: v.due, photos: pst.ids });
           if (!nb) return t('required');
           p.bills.push(nb);
         } else {
           bill.date = date; bill.supplier = v.supplier.slice(0, 60); bill.code = v.code; bill.desc = v.desc.slice(0, 80);
           bill.amount = L.round2(v.amount);
+          bill.due = L.isDate(v.due) ? v.due : '';
           bill.photos = L.photoIds(pst.ids);
         }
         save(); renderAll();
@@ -1169,6 +1230,9 @@
       var row = el('div', 'btnrow');
       if (c.balance > 0) row.appendChild(btn(t('receive'), 'primary', function () { receiveCert(p, cert); }));
       row.appendChild(btn(t('print'), '', function () { printCertificate(p, cert); }));
+      row.appendChild(btn(t('export_cert_xlsx'), '', function () {
+        saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id));
+      }));
       row.appendChild(btn(t('edit_cert'), '', function () { editCert(p, cert); }));
       card.appendChild(row);
       body.appendChild(card);
@@ -1189,7 +1253,7 @@
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
         if (isNew) {
-          var nc = L.sanitizeCert({ no: v.no, date: date, gross: v.gross, advanceRecovery: v.advanceRecovery });
+          var nc = L.sanitizeCert({ no: v.no, date: date, gross: v.gross, advanceRecovery: v.advanceRecovery, snap: L.boqSnapshot(p) });
           if (!nc) return t('required');
           p.certs.push(nc);
         } else {
@@ -1412,19 +1476,22 @@
     renderBooks();
     renderEntries();
     renderProjects();
+    renderContacts();
     renderReports();
     renderSettings();
+    renderBiz();
+    renderReminders();
     if (window.__renderCloud) window.__renderCloud();
   }
 
-  var VIEWS = ['entries', 'projects', 'reports', 'settings'];
+  var VIEWS = ['entries', 'contacts', 'projects', 'reports', 'settings'];
   function showView(name) {
     ui.view = name;
     VIEWS.forEach(function (v) { $('view-' + v).hidden = v !== name; });
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.classList.toggle('active', b.getAttribute('data-view') === name);
     });
-    document.body.classList.remove('view-entries', 'view-projects', 'view-reports', 'view-settings');
+    document.body.classList.remove('view-entries', 'view-contacts', 'view-projects', 'view-reports', 'view-settings');
     document.body.classList.add('view-' + name);
     window.scrollTo(0, 0);
   }
@@ -1486,6 +1553,19 @@
     $('category').value = e ? e.category : '';
     $('note').value = e ? e.note : '';
     $('deleteEntry').hidden = !e;
+    fillContactSel(e ? e.contactId : 0);
+    var ms = $('modeSel');
+    ms.textContent = '';
+    ms.appendChild(option('', t('mode_none')));
+    L.MODES.forEach(function (m) { ms.appendChild(option(m, t('mode_' + m))); });
+    ms.value = e ? e.mode : '';
+    $('by').value = e ? e.by : myName();
+    var bl = $('byList');
+    bl.textContent = '';
+    var bySeen = {};
+    var biz = byId(state.businesses, book().businessId);
+    var byNames = [myName()].concat(biz ? biz.staff.map(function (m) { return m.name; }) : [], book().entries.map(function (x) { return x.by; }));
+    byNames.forEach(function (n) { if (n && !bySeen[n]) { bySeen[n] = true; bl.appendChild(option(n, '')); } });
 
     var proj = projectOfBook(book());
     if (proj) {
@@ -1503,6 +1583,7 @@
       proj.bills.forEach(function (b) { if (b.supplier) names.push(b.supplier); });
       proj.workers.forEach(function (w) { names.push(w.name); });
       if (proj.client) names.push(proj.client);
+      state.contacts.forEach(function (c) { names.push(c.name); });
       names.forEach(function (n) { if (!seen[n]) { seen[n] = true; pl.appendChild(option(n, '')); } });
       refreshEntryLinks();
       var cur = e ? (e.type === 'out' ? e.billId : e.certId) : 0;
@@ -1572,7 +1653,11 @@
       code = ''; billId = 0; certId = 0;
     }
 
+    var contactId = Number($('contactSel').value) || 0;
+    var contact = contactId ? byId(state.contacts, contactId) : null;
+    if (contact) party = contact.name; else contactId = 0;
     var draft = L.sanitizeEntry({
+      mode: $('modeSel').value, by: $('by').value, contactId: contactId,
       id: ui.editingId || L.newId(),
       type: type,
       amount: parseFloat($('amount').value),
@@ -1622,10 +1707,299 @@
   $('typeFilter').addEventListener('change', function () { ui.type = this.value; renderEntries(); });
   $('fromDate').addEventListener('change', function () { ui.from = this.value; renderEntries(); });
   $('toDate').addEventListener('change', function () { ui.to = this.value; renderEntries(); });
+  $('contactFilter').addEventListener('change', function () { ui.contactId = Number(this.value) || 0; renderEntries(); });
+  $('modeFilter').addEventListener('change', function () { ui.mode = this.value; renderEntries(); });
+  $('byFilter').addEventListener('change', function () { ui.by = this.value; renderEntries(); });
+  $('catFilter').addEventListener('change', function () { ui.category = this.value; renderEntries(); });
   $('clearFilters').addEventListener('click', function () {
+    ui.mode = ''; ui.by = ''; ui.category = ''; ui.contactId = 0;
     ui.q = ''; ui.type = 'all'; ui.from = ''; ui.to = '';
     $('q').value = ''; $('typeFilter').value = 'all'; $('fromDate').value = ''; $('toDate').value = '';
     renderEntries();
+  });
+
+  /* ---------- contacts ---------- */
+  function myName() { try { return window.__myName ? window.__myName() : ''; } catch (e) { return ''; } }
+
+  function fillContactSel(current) {
+    var sel = $('contactSel');
+    sel.textContent = '';
+    sel.appendChild(option('', t('no_contact_opt')));
+    state.contacts.slice().sort(function (a, c) { return a.name.localeCompare(c.name); }).forEach(function (c) {
+      sel.appendChild(option(String(c.id), c.name + (c.phone ? ' · ' + c.phone : '')));
+    });
+    sel.appendChild(option('__new', t('new_contact_opt')));
+    sel.value = current && byId(state.contacts, current) ? String(current) : '';
+    sel._prev = sel.value;
+  }
+
+  $('contactSel').addEventListener('change', function () {
+    var sel = this;
+    if (sel.value === '__new') {
+      sel.value = sel._prev || '';
+      editContact(null, function (c) { fillContactSel(c.id); applyContactToParty(c); });
+      return;
+    }
+    sel._prev = sel.value;
+    var c = byId(state.contacts, Number(sel.value));
+    if (c) applyContactToParty(c);
+  });
+  function applyContactToParty(c) { if (c && !$('entryProject').hidden) $('party').value = c.name; }
+
+  function kindOptions(withAll) {
+    var o = withAll ? [option('all', t('all_kinds'))] : [];
+    L.KINDS.forEach(function (k) { o.push(option(k, t('kind_' + k))); });
+    return o;
+  }
+
+  function editContact(contact, done) {
+    var isNew = !contact;
+    var c = contact || { name: '', phone: '', email: '', address: '', kind: 'customer', note: '' };
+    openForm({
+      title: isNew ? t('add_contact') : t('edit_contact'),
+      fields: [
+        { key: 'name', label: t('contact_name'), type: 'text', value: c.name, required: true },
+        { key: 'kind', label: t('contact_kind'), type: 'select', options: L.KINDS.map(function (k) { return { value: k, label: t('kind_' + k) }; }), value: c.kind },
+        { key: 'phone', label: t('contact_phone'), type: 'text', value: c.phone, max: 30 },
+        { key: 'email', label: t('contact_email'), type: 'text', value: c.email },
+        { key: 'address', label: t('contact_address'), type: 'text', value: c.address, max: 80 },
+        { key: 'note', label: t('contact_note'), type: 'text', value: c.note, max: 80 }
+      ],
+      onSubmit: function (v) {
+        var nc = L.sanitizeContact({ id: contact ? contact.id : L.newId(), name: v.name, kind: v.kind, phone: v.phone, email: v.email, address: v.address, note: v.note });
+        if (!nc) return t('required');
+        if (isNew) state.contacts.push(nc); else Object.keys(nc).forEach(function (k) { contact[k] = nc[k]; });
+        var saved = isNew ? nc : contact;
+        // entries keep the contact's name in their payee text so searches and exports match
+        if (!isNew) state.books.forEach(function (b) { b.entries.forEach(function (e) { if (e.contactId === saved.id) e.party = saved.name; }); });
+        save(); renderAll();
+        if (done) done(saved);
+        return null;
+      },
+      onDelete: isNew ? null : function () {
+        if (!window.confirm(t('confirm_delete_contact'))) return false;
+        state.books.forEach(function (b) { b.entries.forEach(function (e) { if (e.contactId === contact.id) e.contactId = 0; }); });
+        state.contacts = state.contacts.filter(function (x) { return x.id !== contact.id; });
+        if (ui.contactId === contact.id) ui.contactId = 0;
+        save(); renderAll();
+        return true;
+      }
+    });
+  }
+
+  function renderContacts() {
+    var sel = $('ckind');
+    var keep = ui.ckind;
+    sel.textContent = '';
+    kindOptions(true).forEach(function (o) { sel.appendChild(o); });
+    sel.value = keep;
+    var bal = L.contactBalances(state);
+    var q = ui.cq.trim().toLowerCase();
+    var list = state.contacts.filter(function (c) {
+      if (ui.ckind !== 'all' && c.kind !== ui.ckind) return false;
+      return !q || (c.name + ' ' + c.phone + ' ' + c.email + ' ' + c.address).toLowerCase().indexOf(q) >= 0;
+    }).sort(function (a, c) { return a.name.localeCompare(c.name); });
+    var ul = $('contactList');
+    ul.textContent = '';
+    var tin = 0, tout = 0;
+    list.forEach(function (c) {
+      var b = bal[c.id];
+      tin += b.cashIn; tout += b.cashOut;
+      var li = el('li', 'item contact');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      li.appendChild(el('span', 'avatar', c.name.charAt(0).toUpperCase()));
+      var meta = el('div', 'meta');
+      meta.appendChild(el('div', 'title', c.name));
+      meta.appendChild(el('div', 'detail', [t('kind_' + c.kind), c.phone, b.count ? t('entries_n', { n: b.count }) : ''].filter(Boolean).join(' · ')));
+      if (b.count) meta.appendChild(el('div', 'detail', t('received_total') + ' ' + money(b.cashIn) + ' · ' + t('paid_total') + ' ' + money(b.cashOut)));
+      li.appendChild(meta);
+      var side = el('div', 'cside');
+      if (b.count) side.appendChild(el('span', 'amt ' + (b.net >= 0 ? 'in' : 'out'), (b.net >= 0 ? '+' : '−') + money(Math.abs(b.net))));
+      var acts = el('div', 'cacts');
+      if (c.phone) { var a1 = el('a', null, '📞'); a1.href = 'tel:' + c.phone.replace(/[^0-9+]/g, ''); a1.addEventListener('click', function (ev) { ev.stopPropagation(); }); acts.appendChild(a1); }
+      if (c.email) { var a2 = el('a', null, '✉️'); a2.href = 'mailto:' + c.email; a2.addEventListener('click', function (ev) { ev.stopPropagation(); }); acts.appendChild(a2); }
+      if (b.count) {
+        var a3 = el('a', null, '🔎');
+        a3.href = '#';
+        a3.addEventListener('click', function (ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          ui.contactId = c.id; ui.q = ''; $('q').value = '';
+          showView('entries'); renderEntries();
+        });
+        acts.appendChild(a3);
+      }
+      side.appendChild(acts);
+      li.appendChild(side);
+      var open = function () { editContact(c); };
+      li.addEventListener('click', open);
+      li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+      ul.appendChild(li);
+    });
+    $('contactEmpty').hidden = list.length > 0;
+    $('contactEmpty').textContent = state.contacts.length ? t('no_match') : t('no_contacts');
+    $('contactTotals').textContent = list.length ? t('contacts_summary', { n: list.length, i: money(tin), o: money(tout) }) : '';
+  }
+  $('cq').addEventListener('input', function () { ui.cq = this.value; renderContacts(); });
+  $('ckind').addEventListener('change', function () { ui.ckind = this.value; renderContacts(); });
+  $('addContact').addEventListener('click', function () { editContact(null); });
+
+  /* ---------- businesses and staff ---------- */
+  function renderBiz() {
+    var P = $('bizPanel');
+    P.textContent = '';
+    P.appendChild(el('h2', null, t('businesses')));
+    state.businesses.forEach(function (bz) {
+      var card = el('div', 'bizcard');
+      card.appendChild(el('h3', null, bz.name));
+      var nb = state.books.filter(function (b) { return b.businessId === bz.id; }).length;
+      card.appendChild(el('div', 'muted small', t('books') + ': ' + nb));
+      if (!bz.staff.length) card.appendChild(el('p', 'muted small', t('no_staff')));
+      bz.staff.forEach(function (m) {
+        var r = el('button', 'staffrow');
+        r.type = 'button';
+        r.appendChild(el('span', 'avatar', m.name.charAt(0).toUpperCase()));
+        var tx = el('span', 'stext');
+        tx.appendChild(el('b', null, m.name));
+        tx.appendChild(el('small', 'muted', [t('role_' + m.role), m.phone].filter(Boolean).join(' · ')));
+        r.appendChild(tx);
+        r.addEventListener('click', function () { editStaff(bz, m); });
+        card.appendChild(r);
+      });
+      var row = el('div', 'btnrow');
+      row.appendChild(btn(t('add_staff'), '', function () { editStaff(bz, null); }));
+      row.appendChild(btn(t('rename_business'), '', function () { editBusiness(bz); }));
+      card.appendChild(row);
+      P.appendChild(card);
+    });
+    P.appendChild(btn(t('add_business'), 'block', function () { editBusiness(null); }));
+    P.appendChild(el('p', 'muted small', t('staff_note')));
+  }
+
+  function editBusiness(bz) {
+    openForm({
+      title: bz ? t('rename_business') : t('add_business'),
+      fields: [{ key: 'name', label: t('business_name'), type: 'text', value: bz ? bz.name : '', required: true, max: 40 }],
+      onSubmit: function (v) {
+        if (bz) bz.name = v.name.slice(0, 40);
+        else {
+          var nb = L.sanitizeBusiness({ id: 'biz' + L.newId(), name: v.name, staff: [] });
+          state.businesses.push(nb);
+          state.business = nb.id;
+          var id = 'b' + L.newId();
+          state.books.push({ id: id, name: nb.name, projectId: '', businessId: nb.id, entries: [] });
+          state.current = id;
+        }
+        save(); renderAll();
+        return null;
+      },
+      onDelete: bz ? function () {
+        if (!window.confirm(t('confirm_delete_business'))) return false;
+        state.books.forEach(function (b) { if (b.businessId === bz.id) b.businessId = ''; });
+        state.businesses = state.businesses.filter(function (x) { return x.id !== bz.id; });
+        if (state.business === bz.id) state.business = '';
+        save(); renderAll();
+        return true;
+      } : null
+    });
+  }
+
+  function editStaff(bz, m) {
+    openForm({
+      title: m ? t('edit_staff') : t('add_staff'),
+      fields: [
+        { key: 'name', label: t('staff_name'), type: 'text', value: m ? m.name : '', required: true },
+        { key: 'phone', label: t('staff_phone'), type: 'text', value: m ? m.phone : '', max: 30 },
+        { key: 'role', label: t('staff_role'), type: 'select', options: L.STAFF_ROLES.map(function (r) { return { value: r, label: t('role_' + r) }; }), value: m ? m.role : 'cashier' }
+      ],
+      onSubmit: function (v) {
+        var ns = L.sanitizeBusiness({ id: bz.id, name: bz.name, staff: [{ id: m ? m.id : L.newId(), name: v.name, phone: v.phone, role: v.role }] }).staff[0];
+        if (!ns) return t('required');
+        if (m) Object.keys(ns).forEach(function (k) { m[k] = ns[k]; }); else bz.staff.push(ns);
+        save(); renderAll();
+        return null;
+      },
+      onDelete: m ? function () {
+        bz.staff = bz.staff.filter(function (x) { return x.id !== m.id; });
+        save(); renderAll();
+        return true;
+      } : null
+    });
+  }
+
+  /* ---------- reminders: unpaid bills and certificates ---------- */
+  function renderReminders() {
+    var list = L.reminders(state, L.todayStr(), 7);
+    var urgent = list.filter(function (r) { return r.level === 'overdue' || r.level === 'soon'; });
+    var ban = $('remindBanner');
+    ban.hidden = !urgent.length;
+    ban.textContent = urgent.length ? t('bills_due_banner', { n: urgent.length }) : '';
+    var box = $('remindBox');
+    box.textContent = '';
+    if (ui.projectId || !list.length) return;
+    var pn = panel(t('reminders'));
+    list.slice(0, 8).forEach(function (r) {
+      var row = el('button', 'remrow ' + r.level);
+      row.type = 'button';
+      var tx = el('span', 'stext');
+      tx.appendChild(el('b', null, (r.kind === 'cert' ? t('unpaid_cert') + ': ' : '') + (r.who || '—')));
+      tx.appendChild(el('small', 'muted', [r.project, r.desc, r.due ? t('due_label') + ' ' + fmtDate(r.due) : ''].filter(Boolean).join(' · ')));
+      row.appendChild(tx);
+      row.appendChild(el('span', 'amt ' + (r.level === 'overdue' ? 'out' : ''), money(r.amount)));
+      row.addEventListener('click', function () { ui.projectId = r.projectId; ui.section = r.kind === 'cert' ? 'client' : 'bills'; renderProjects(); window.scrollTo(0, 0); });
+      pn.appendChild(row);
+    });
+    box.appendChild(pn);
+  }
+  $('remindBanner').addEventListener('click', function () { showView('projects'); renderProjects(); });
+
+  /* ---------- report export (Excel / PDF) for a date range ---------- */
+  function exportRange() {
+    var from = L.isDate($('rFrom').value) ? $('rFrom').value : '', to = L.isDate($('rTo').value) ? $('rTo').value : '';
+    ui.rFrom = from; ui.rTo = to; ui.rScope = $('rScope').value;
+    var ids = ui.rScope === 'all' ? null : [book().id];
+    return { from: from, to: to, ids: ids };
+  }
+  function initExportPanel() {
+    var sel = $('rScope');
+    sel.textContent = '';
+    sel.appendChild(option('book', t('this_book') + ': ' + book().name));
+    sel.appendChild(option('all', t('all_books_opt')));
+    sel.value = ui.rScope;
+    if (!ui.rFrom && !ui.rTo) {
+      var today = L.todayStr(), pp = cal().parts(today);
+      ui.rFrom = pp ? cal().fromParts(pp.y, pp.m, 1) : today;
+      ui.rTo = today;
+    }
+    $('rFrom').value = ui.rFrom; $('rTo').value = ui.rTo;
+  }
+  $('rXlsx').addEventListener('click', function () {
+    var r = exportRange();
+    saveWorkbook('Cash-report', window.CBExcel.reportWorkbook({ state: state, from: r.from, to: r.to, bookIds: r.ids, title: t('report_title') }));
+  });
+  $('rPdf').addEventListener('click', function () {
+    var r = exportRange();
+    var list = L.rangeEntries(state, r.from, r.to, r.ids);
+    var cn = {};
+    state.contacts.forEach(function (c) { cn[c.id] = c.name; });
+    function group(title, fn) {
+      var m = {};
+      list.forEach(function (e) {
+        var k = fn(e) || '-';
+        m[k] = m[k] || { i: 0, o: 0 };
+        if (e.type === 'in') m[k].i += e.amount; else m[k].o += e.amount;
+      });
+      return { title: title, rows: Object.keys(m).sort().map(function (k) { return [k, L.round2(m[k].i), L.round2(m[k].o), L.round2(m[k].i - m[k].o)]; }) };
+    }
+    printDoc(t('report_title'), window.CBPrint.reportHtml({
+      t: t, money: money, lang: state.settings.lang, title: t('report_title'), date: L.todayStr(),
+      periodLabel: t('period') + ': ' + (r.from ? fmtDate(r.from) : '…') + ' – ' + (r.to ? fmtDate(r.to) : '…'),
+      scopeLabel: r.ids ? book().name : t('all_books_opt'),
+      totals: L.totals(list),
+      groups: [group(t('by_category'), function (e) { return e.category; }), group(t('by_mode'), function (e) { return e.mode ? t('mode_' + e.mode) : ''; }),
+        group(t('by_member'), function (e) { return e.by; }), group(t('by_contact'), function (e) { return e.contactId ? cn[e.contactId] : e.party; })],
+      entries: list, fmt: function (d) { return fmtDate(d); }
+    }));
   });
 
   /* ---------- reports nav ---------- */
@@ -1640,6 +2014,7 @@
       showView(v);
       if (v === 'reports') renderReports();
       if (v === 'projects') renderProjects();
+      if (v === 'contacts') renderContacts();
     });
   });
 
@@ -1661,7 +2036,26 @@
     $('bookName').value = '';
     $('deleteBook').hidden = state.books.length < 2;
     fillBookProject();
+    fillBookBiz();
     openModal('bookModal');
+  });
+  function fillBookBiz() {
+    var sel = $('bookBiz');
+    sel.textContent = '';
+    sel.appendChild(option('', t('no_business')));
+    state.businesses.forEach(function (x) { sel.appendChild(option(x.id, x.name)); });
+    sel.value = book().businessId || state.business || '';
+    $('bookBizField').hidden = !state.businesses.length;
+  }
+  $('bookBiz').addEventListener('change', function () {
+    book().businessId = this.value;
+    save();
+    renderAll();
+  });
+  $('bizSelect').addEventListener('change', function () {
+    state.business = this.value;
+    save();
+    renderAll();
   });
   $('bookProject').addEventListener('change', function () {
     book().projectId = this.value;
@@ -1671,7 +2065,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '1.9.1';
+  var APP_VERSION = '2.0.0';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });
@@ -1681,7 +2075,7 @@
     var name = $('bookName').value.trim().slice(0, 40);
     if (!name) { $('bookName').focus(); return; }
     var id = 'b' + L.newId();
-    state.books.push({ id: id, name: name, projectId: $('bookProject').value || '', entries: [] });
+    state.books.push({ id: id, name: name, projectId: $('bookProject').value || '', businessId: $('bookBiz').value || state.business || '', entries: [] });
     state.current = id;
     save();
     closeModal('bookModal');
@@ -1800,6 +2194,29 @@
     a.click();
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  /* binary files (.xlsx): Android gets base64, the browser a normal download */
+  function saveBinary(name, mime, bytes) {
+    if (window.AndroidBridge && typeof window.AndroidBridge.saveFileB64 === 'function') {
+      var bin = '';
+      for (var i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      var where = window.AndroidBridge.saveFileB64(name, mime, btoa(bin));
+      toast(where ? t('saved') + ' ' + where : t('save_failed'));
+      return;
+    }
+    var blob = new Blob([bytes], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast(t('xlsx_saved'));
+  }
+  var XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  function saveWorkbook(base, wb) {
+    if (!wb) return;
+    saveBinary(base + '-' + L.todayStr() + '.xlsx', XLSX_MIME, window.CBExcel.toBytes(wb));
   }
 
   $('exportBtn').addEventListener('click', function () {
@@ -1924,6 +2341,8 @@
     function others(id) { var i = info[id]; return i ? Object.keys(i.members || {}).length : 0; }
 
     /* icon in front of the book name: cloud = only mine, people = shared, eye = view only, phone = not synced */
+    window.__myName = function () { var c = cloud.cfg(); return (c && c.profile && c.profile.name) || ''; };
+
     window.__bookIcon = function (b) {
       if (!b.sync) return b.nolink ? '📱 ' : '';
       if (b.sync.role === 'view') return '👁 ';

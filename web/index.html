@@ -23,6 +23,7 @@
     <h1>CashBook</h1>
     <div class="bookbar">
       <button type="button" id="syncDot" class="sync" aria-label="Sync" hidden></button>
+      <select id="bizSelect" aria-label="Business" hidden></select>
       <select id="bookSelect" aria-label="Book"></select>
       <button type="button" id="bookBtn" class="icon" data-i18n-aria="books" aria-label="Books">⋮</button>
     </div>
@@ -31,6 +32,7 @@
   <main>
     <!-- ENTRIES -->
     <section id="view-entries" class="view">
+      <button type="button" id="remindBanner" class="remind" hidden></button>
       <div class="summary">
         <div class="card balance"><span class="label" data-i18n="balance">Net balance</span><span class="value" id="balance"></span></div>
         <div class="card in"><span class="label" data-i18n="cash_in">Cash in</span><span class="value" id="totalIn"></span></div>
@@ -51,6 +53,17 @@
           <label class="field"><span data-i18n="from">From</span><input type="date" id="fromDate"></label>
           <label class="field"><span data-i18n="to">To</span><input type="date" id="toDate"></label>
         </div>
+        <details id="moreFilters" class="more">
+          <summary data-i18n="more_filters">More filters</summary>
+          <div class="row">
+            <select id="contactFilter" aria-label="Contact"></select>
+            <select id="modeFilter" aria-label="Payment mode"></select>
+          </div>
+          <div class="row">
+            <select id="byFilter" aria-label="Member"></select>
+            <select id="catFilter" aria-label="Category"></select>
+          </div>
+        </details>
         <p id="filterTotals" class="muted small" hidden></p>
       </div>
 
@@ -58,8 +71,23 @@
       <p id="empty" class="empty" data-i18n="no_entries">No entries yet. Tap + to add one.</p>
     </section>
 
+    <!-- CONTACTS -->
+    <section id="view-contacts" class="view" hidden>
+      <div class="panel">
+        <input type="search" id="cq" data-i18n-ph="search_contacts" placeholder="Search name or phone">
+        <div class="row">
+          <select id="ckind" aria-label="Type"></select>
+          <button type="button" id="addContact" class="primary" data-i18n="add_contact">Add contact</button>
+        </div>
+      </div>
+      <p id="contactTotals" class="muted small"></p>
+      <ul id="contactList" class="list"></ul>
+      <p id="contactEmpty" class="empty" data-i18n="no_contacts">No contacts yet.</p>
+    </section>
+
     <!-- PROJECTS -->
     <section id="view-projects" class="view" hidden>
+      <div id="remindBox"></div>
       <div id="projList"></div>
       <div id="projDetail" hidden></div>
     </section>
@@ -82,6 +110,19 @@
         <h2 data-i18n="last6">Last 6 months</h2>
         <div id="chart" class="chart"></div>
         <p class="legend small"><span class="dot in"></span><span data-i18n="cash_in">Cash in</span> &nbsp; <span class="dot out"></span><span data-i18n="cash_out">Cash out</span></p>
+      </div>
+
+      <div class="panel" id="exportPanel">
+        <h2 data-i18n="export_report">Export report</h2>
+        <div class="row">
+          <label class="field"><span data-i18n="from">From</span><input type="date" id="rFrom"></label>
+          <label class="field"><span data-i18n="to">To</span><input type="date" id="rTo"></label>
+        </div>
+        <label class="field"><span data-i18n="books">Books</span><select id="rScope"></select></label>
+        <div class="row">
+          <button type="button" id="rXlsx" class="primary" data-i18n="export_excel">Excel</button>
+          <button type="button" id="rPdf" data-i18n="export_pdf">PDF / print</button>
+        </div>
       </div>
     </section>
 
@@ -124,6 +165,8 @@
         <p class="muted small" data-i18n="pin_note">The PIN is a simple lock for casual privacy.</p>
       </div>
 
+      <div class="panel" id="bizPanel"></div>
+
       <button type="button" id="aboutBtn" class="block"><span aria-hidden="true">ℹ️</span> <span data-i18n="about">About</span></button>
 
       <div class="panel">
@@ -145,6 +188,7 @@
 
   <nav class="tabs">
     <button type="button" data-view="entries" class="active"><span>📒</span><b data-i18n="entries">Entries</b></button>
+    <button type="button" data-view="contacts"><span>👥</span><b data-i18n="contacts">Contacts</b></button>
     <button type="button" data-view="projects"><span>🏗️</span><b data-i18n="projects">Projects</b></button>
     <button type="button" data-view="reports"><span>📊</span><b data-i18n="reports">Reports</b></button>
     <button type="button" data-view="settings"><span>⚙️</span><b data-i18n="settings">Settings</b></button>
@@ -162,6 +206,12 @@
       <input type="date" id="date" required>
       <input type="text" id="category" list="catList" data-i18n-ph="category" placeholder="Category" maxlength="40">
       <datalist id="catList"></datalist>
+      <select id="contactSel" aria-label="Contact"></select>
+      <div class="row">
+        <select id="modeSel" aria-label="Payment mode"></select>
+        <input type="text" id="by" list="byList" data-i18n-ph="member" placeholder="Member" maxlength="40">
+        <datalist id="byList"></datalist>
+      </div>
       <input type="text" id="note" data-i18n-ph="remark" placeholder="Remark (optional)" maxlength="80">
       <div id="entryPhotos"></div>
       <div id="entryProject" class="stack" hidden>
@@ -184,6 +234,7 @@
       <h2 data-i18n="books">Books</h2>
       <input type="text" id="bookName" data-i18n-ph="book_name" placeholder="Book name" maxlength="40">
       <label class="field"><span data-i18n="project">Project</span><select id="bookProject"></select></label>
+      <label class="field" id="bookBizField"><span data-i18n="business">Business</span><select id="bookBiz"></select></label>
       <button type="button" id="newBook" class="primary block" data-i18n="new_book">New book</button>
       <button type="button" id="renameBook" class="block" data-i18n="rename_book">Rename</button>
       <button type="button" id="deleteBook" class="block danger" data-i18n="delete_book">Delete book</button>
@@ -252,7 +303,10 @@
   <script src="i18n.js"></script>
   <script src="i18n-projects.js"></script>
   <script src="i18n-more.js"></script>
+  <script src="i18n-contacts.js"></script>
   <script src="print.js"></script>
+  <script src="xlsx.js"></script>
+  <script src="excel.js"></script>
   <script src="photos.js"></script>
   <script src="calendar.js"></script>
   <script src="sync.js"></script>
