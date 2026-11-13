@@ -463,3 +463,5 @@ details.more > summary { cursor: pointer; font-size: .85rem; color: var(--accent
 details.more > summary::-webkit-details-marker { display: none; }
 details.more[open] > summary { margin-bottom: 8px; }
 details.more .row + .row { margin-top: 8px; }
+
+.subhead { margin: 14px 0 4px; padding-top: 10px; border-top: 1px dashed var(--line, #d9dde3); font-size: 13px; font-weight: 600; opacity: .75; text-transform: none; }

@@ -74,13 +74,12 @@
     h += row(t('prev_certified'), m(d.seq.previous));
     h += row(t('gross'), m(k.gross));
     h += row(t('cum_certified'), m(d.seq.cumulative), 'head');
+    h += row('+ ' + t('vat_amt') + ' (' + p.vat + '%)', m(k.vat));
+    h += row(t('work_incl_vat'), m(k.gross + k.vat), 'head');
     h += row('− ' + t('retention_amt') + ' (' + p.retention + '%)', m(k.retention));
     h += row('− ' + t('advance_recovery'), m(k.advanceRecovery));
-    h += row('+ ' + t('vat_amt') + ' (' + p.vat + '%)', m(k.vat));
-    h += row('− ' + t('wht_amt') + ' (' + p.wht + '%)', m(k.wht));
+    if (k.penalty > 0) h += row('− ' + t('penalty'), m(k.penalty));
     h += row(t('payable'), m(k.payable), 'total');
-    h += row(t('received'), m(k.received));
-    h += row(t('balance_due'), m(k.balance), 'head');
     h += '</table>';
     h += '<p class="note">' + esc(t('cert_formula')) + '</p>';
 

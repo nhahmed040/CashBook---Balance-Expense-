@@ -3,7 +3,7 @@
 (function () {
   var add = {
     en: {
-      from_phonebook: '📱 From phone book', phonebook_opt: '📱 From phone book…', more_filters: 'More filters (contact, mode, member, category)', contacts: 'Contacts', contact: 'Contact', add_contact: 'Add contact', edit_contact: 'Edit contact', search_contacts: 'Search name or phone',
+      advance_pct: 'Advance payment received (% of contract)', recovery_pct: 'Advance repayment %', cash_received: 'Cash received', vat_wht_pct: 'VAT withheld (% of VAT)', work_incl_vat: 'Work including VAT', penalty: 'Penalty', pay_to_contractor: 'Payment to contractor', vat_wht_amt: 'VAT withheld', of_vat: 'of VAT', cash_due: 'Cash to receive', wht_receipt: 'Withholding receipt no.', vat_wht_receipt: 'VAT withholding receipt no.', receipt_missing: 'receipt missing', tax_receipts: 'Tax receipts', adv_auto: 'Automatic', adv_manual: 'Enter amount', adv_manual_amount: 'Advance repayment amount', from_phonebook: '📱 From phone book', phonebook_opt: '📱 From phone book…', more_filters: 'More filters (contact, mode, member, category)', contacts: 'Contacts', contact: 'Contact', add_contact: 'Add contact', edit_contact: 'Edit contact', search_contacts: 'Search name or phone',
       no_contacts: 'No contacts yet. Add customers and suppliers, then pick them on entries.', no_contact_opt: 'No contact', new_contact_opt: '➕ New contact…',
       all_contacts: 'All contacts', all_kinds: 'All types', kind_customer: 'Customer', kind_supplier: 'Supplier', kind_other: 'Other',
       contact_name: 'Name', contact_phone: 'Phone', contact_email: 'Email', contact_address: 'Address', contact_kind: 'Type', contact_note: 'Note',

@@ -41,7 +41,13 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 - **Excel exports in your own layout**: the Interim Payment Certificate (Certificate, Summary and BOQ sheets) and the Summary BOQ follow the Gamachis workbooks, with live formulas. Previous / Current / Total-to-date quantities come from the certificates already issued.
 - Staff roles inside a business are a directory. Access to a book is still controlled by sharing that book (edit or view).
 
-## Get the Android APK
+## Payment certificate rules (2.1)
+
+- Net payable = work including VAT − retention (% of work including VAT) − advance repayment − penalty
+- Advance payment received (default 20% of the contract sum) and advance repayment (default 20% of the work including VAT, never more than the advance still unrecovered) are set in the project details; repayment can be overwritten on each certificate. Penalty is an amount on each certificate.
+- Withholding tax (default 3% of the work before VAT) and withheld VAT (50% of the VAT, 7.5% at 15% VAT) are not part of the certificate. They are deducted after the net payable, in the app only: cash to receive = net payable − both. The client's receipt numbers for each are recorded under "Tax receipts".
+- The printed and Excel certificates do not show withholding.
+
 
 The APK is built automatically by GitHub Actions.
 

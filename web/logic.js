@@ -160,6 +160,17 @@
     return out;
   }
 
+  /* Advance payment received: a % of the contract sum (the amount follows the %). Older data that only has an
+     amount keeps that amount, and gets the % worked out from it. */
+  function advanceOf(p) {
+    var cs = num(p.contractSum, 0), amount = num(p.advance, 0), pct;
+    var given = p.advancePct != null && p.advancePct !== '' && isFinite(Number(p.advancePct));
+    if (given) pct = Math.min(100, Math.max(0, Math.round(Number(p.advancePct) * 1e6) / 1e6));
+    else pct = cs > 0 ? Math.min(100, Math.round(amount / cs * 1e8) / 1e6) : 0;
+    if (cs > 0) amount = round2(cs * pct / 100);
+    return { pct: pct, amount: amount };
+  }
+
   function sanitizeCert(c) {
     if (!c || typeof c !== 'object') return null;
     var g = Number(c.gross);
@@ -170,6 +181,9 @@
       date: isDate(c.date) ? c.date : todayStr(),
       gross: round2(g),
       advanceRecovery: num(c.advanceRecovery, 0),
+      penalty: num(c.penalty, 0),
+      whtReceipt: str(c.whtReceipt, 30),
+      vatWhtReceipt: str(c.vatWhtReceipt, 30),
       receipts: mapList(c.receipts, sanitizePayment, 500),
       snap: sanitizeSnap(c.snap)
     };
@@ -226,6 +240,7 @@
     mapList(p.attendance, sanitizeAttendance, 50000).forEach(function (a) {
       if (wIds[a.workerId]) attMap[a.date + '|' + a.workerId] = a;
     });
+    var adv = advanceOf(p);
     return {
       id: str(p.id, 40) || ('p' + newId()),
       name: str(p.name, 60) || ('Project ' + n),
@@ -237,7 +252,10 @@
       vat: num(p.vat, 0, 100),
       wht: num(p.wht, 0, 100),
       retention: num(p.retention, 0, 100),
-      advance: num(p.advance, 0),
+      advance: adv.amount,
+      advancePct: adv.pct,
+      recoveryPct: num(p.recoveryPct == null ? 20 : p.recoveryPct, 0, 100),
+      vatWhtPct: num(p.vatWhtPct == null ? 50 : p.vatWhtPct, 0, 100),
       variation: num(p.variation, 0),
       rebate: num(p.rebate, 0, 100),
       contractor: str(p.contractor, 60),
@@ -595,17 +613,33 @@
   function certReceived(cert) { return sum(cert.receipts, function (p) { return p.amount; }); }
 
   /* Certificate arithmetic, shown to the user so they can check it against the contract:
-     payable = gross - retention - advance recovery + VAT - withholding */
+       net payable = (gross + VAT) - retention (% of gross + VAT) - advance recovery - penalty
+     Withholding tax (on the gross work) and the withheld share of VAT (50% of VAT, e.g. 7.5%) are NOT part of
+     the certificate. They come off the net payable afterwards, and the client gives a receipt for each, so the
+     cash to receive = net payable - withholding - VAT withheld. */
   function certCalc(project, cert) {
-    var retention = round2(cert.gross * project.retention / 100);
     var vat = round2(cert.gross * project.vat / 100);
+    var retention = round2((cert.gross + vat) * project.retention / 100);   // retention is held on the work including VAT
     var wht = round2(cert.gross * project.wht / 100);
-    var payable = round2(cert.gross - retention - cert.advanceRecovery + vat - wht);
+    var vatWht = round2(vat * (project.vatWhtPct == null ? 50 : project.vatWhtPct) / 100);
+    var penalty = cert.penalty || 0;
+    var payable = round2(cert.gross - retention - cert.advanceRecovery + vat - penalty);
+    var cashDue = round2(payable - wht - vatWht);
     var received = certReceived(cert);
     return {
-      gross: cert.gross, retention: retention, advanceRecovery: cert.advanceRecovery,
-      vat: vat, wht: wht, payable: payable, received: received, balance: round2(payable - received)
+      gross: cert.gross, retention: retention, advanceRecovery: cert.advanceRecovery, penalty: penalty,
+      vat: vat, payable: payable, wht: wht, vatWht: vatWht, cashDue: cashDue,
+      received: received, balance: round2(cashDue - received)
     };
+  }
+
+  /* Advance repayment to suggest for a certificate: the project's % of the work including VAT,
+     never more than the advance that is still unrecovered. */
+  function suggestAdvanceRecovery(project, gross, exceptCertId) {
+    var recovered = sum(project.certs, function (c) { return c.id === exceptCertId ? 0 : c.advanceRecovery; });
+    var left = Math.max(0, round2(project.advance - recovered));
+    var want = round2(gross * (1 + project.vat / 100) * (project.recoveryPct == null ? 20 : project.recoveryPct) / 100);
+    return Math.min(left, want);
   }
 
   function projectBooks(state, projectId) {
@@ -649,7 +683,8 @@
       advance: p.advance, advanceRecovered: advanceRecovered, advanceBalance: round2(p.advance - advanceRecovered),
       payableTotal: payableTotal,
       received: round2(p.advance + receivedCerts),
-      clientOutstanding: round2(payableTotal - receivedCerts),
+      taxWithheld: sum(calcs, function (c) { return c.wht + c.vatWht; }),
+      clientOutstanding: round2(sum(calcs, function (c) { return c.cashDue; }) - receivedCerts),
       costByCode: costByCode, costTotal: costTotal,
       budgetTotal: budgetTotal, budgetRemaining: round2(budgetTotal - costTotal),
       billsTotal: billsTotal, billsPaid: billsPaid, billsOutstanding: round2(billsTotal - billsPaid),
@@ -899,7 +934,7 @@
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
     sanitizeBoqItem: sanitizeBoqItem, itemAmount: itemAmount, itemEarned: itemEarned, isHeading: isHeading,
-    boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
+    suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds
   };

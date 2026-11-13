@@ -1032,10 +1032,12 @@
       { key: 'location', label: t('location'), type: 'text', value: p.location },
       { key: 'contractor', label: t('contractor_name'), type: 'text', value: p.contractor },
       { key: 'contractSum', label: t('contract_sum'), type: 'number', min: 0, value: p.contractSum || '' },
-      { key: 'advance', label: t('advance_paid'), type: 'number', min: 0, value: p.advance || '' },
+      { key: 'advancePct', label: t('advance_pct'), type: 'number', min: 0, max: 100, value: p.advancePct },
+      { key: 'recoveryPct', label: t('recovery_pct'), type: 'number', min: 0, max: 100, value: p.recoveryPct },
       { key: 'vat', label: t('vat_pct'), type: 'number', min: 0, max: 100, value: p.vat },
-      { key: 'wht', label: t('wht_pct'), type: 'number', min: 0, max: 100, value: p.wht },
       { key: 'retention', label: t('retention_pct'), type: 'number', min: 0, max: 100, value: p.retention },
+      { key: 'wht', label: t('wht_pct'), type: 'number', min: 0, max: 100, value: p.wht },
+      { key: 'vatWhtPct', label: t('vat_wht_pct'), type: 'number', min: 0, max: 100, value: p.vatWhtPct },
       { key: 'variation', label: t('variation_total'), type: 'number', min: 0, value: p.variation || '' },
       { key: 'rebate', label: t('rebate_pct'), type: 'number', min: 0, max: 100, value: p.rebate || '' },
       { key: 'startDate', label: t('start_date'), type: 'date', value: p.startDate },
@@ -1044,7 +1046,11 @@
   }
   function applyProjectValues(p, v) {
     p.name = v.name.slice(0, 60); p.client = v.client.slice(0, 60); p.location = v.location.slice(0, 60);
-    p.contractSum = Math.max(0, L.round2(v.contractSum)); p.advance = Math.max(0, L.round2(v.advance));
+    p.contractSum = Math.max(0, L.round2(v.contractSum));
+    p.advancePct = Math.min(100, Math.max(0, Math.round(v.advancePct * 1e6) / 1e6));
+    p.recoveryPct = Math.min(100, Math.max(0, L.round2(v.recoveryPct)));
+    p.vatWhtPct = Math.min(100, Math.max(0, L.round2(v.vatWhtPct)));
+    p.advance = p.contractSum > 0 ? L.round2(p.contractSum * p.advancePct / 100) : p.advance;
     p.vat = Math.min(100, Math.max(0, L.round2(v.vat))); p.wht = Math.min(100, Math.max(0, L.round2(v.wht)));
     p.retention = Math.min(100, Math.max(0, L.round2(v.retention)));
     p.contractor = v.contractor.slice(0, 60); p.variation = Math.max(0, L.round2(v.variation)); p.rebate = Math.min(100, Math.max(0, L.round2(v.rebate)));
@@ -1060,8 +1066,8 @@
     });
   }
   function newProject() {
-    // VAT 15% and retention 5% are starting values only: set them to what your contract says.
-    var p = L.sanitizeProject({ name: '', vat: 15, wht: 0, retention: 5 }, state.projects.length + 1);
+    // VAT 15%, retention 5%, withholding 3% and advance 20% are starting values only: set them to what your contract says.
+    var p = L.sanitizeProject({ name: '', vat: 15, wht: 3, retention: 5, advancePct: 20, recoveryPct: 20, vatWhtPct: 50 }, state.projects.length + 1);
     p.name = '';
     openForm({
       title: t('new_project'),
@@ -1193,10 +1199,12 @@
     var s = L.projectSummary(state, p.id);
     var info = panel(t('client_section'));
     info.appendChild(kv(t('contract_sum'), money(p.contractSum)));
-    info.appendChild(kv(t('advance_paid'), money(p.advance)));
+    info.appendChild(kv(t('advance_paid') + ' (' + pct(p.advancePct) + ')', money(p.advance)));
+    info.appendChild(kv(t('recovery_pct'), pct(p.recoveryPct)));
     info.appendChild(kv(t('vat_pct'), pct(p.vat)));
-    info.appendChild(kv(t('wht_pct'), pct(p.wht)));
     info.appendChild(kv(t('retention_pct'), pct(p.retention)));
+    info.appendChild(kv(t('wht_pct'), pct(p.wht)));
+    info.appendChild(kv(t('vat_wht_pct'), pct(p.vatWhtPct)));
     info.appendChild(kv(t('due_from_client'), money(s.clientOutstanding), s.clientOutstanding > 0 ? 'pos' : '', 'total'));
     info.appendChild(el('p', 'note', t('cert_formula')));
     info.appendChild(btn(t('edit_project'), 'block', function () { editProject(p); }));
@@ -1209,12 +1217,19 @@
       card.appendChild(el('h3', null, cert.no || t('client')));
       card.appendChild(el('div', 'muted small', fmtDate(cert.date)));
       card.appendChild(kv(t('gross'), money(c.gross)));
-      card.appendChild(kv('− ' + t('retention_amt'), money(c.retention)));
+      card.appendChild(kv('+ ' + t('vat_amt') + ' (' + pct(p.vat) + ')', money(c.vat)));
+      card.appendChild(kv(t('work_incl_vat'), money(L.round2(c.gross + c.vat))));
+      card.appendChild(kv('− ' + t('retention_amt') + ' (' + pct(p.retention) + ')', money(c.retention)));
       card.appendChild(kv('− ' + t('advance_recovery'), money(c.advanceRecovery)));
-      card.appendChild(kv('+ ' + t('vat_amt'), money(c.vat)));
-      card.appendChild(kv('− ' + t('wht_amt'), money(c.wht)));
+      if (c.penalty > 0) card.appendChild(kv('− ' + t('penalty'), money(c.penalty)));
       card.appendChild(kv(t('payable'), money(c.payable), 'total'));
-      card.appendChild(kv(t('received'), money(c.received)));
+      card.appendChild(el('h4', 'subhead', t('pay_to_contractor')));
+      card.appendChild(kv('− ' + t('wht_amt') + ' (' + pct(p.wht) + ')', money(c.wht)));
+      card.appendChild(kv('− ' + t('vat_wht_amt') + ' (' + pct(p.vatWhtPct) + ' ' + t('of_vat') + ')', money(c.vatWht)));
+      card.appendChild(kv(t('cash_due'), money(c.cashDue), 'total'));
+      card.appendChild(kv(t('wht_receipt'), cert.whtReceipt || t('receipt_missing'), cert.whtReceipt || !(c.wht > 0) ? '' : 'neg'));
+      card.appendChild(kv(t('vat_wht_receipt'), cert.vatWhtReceipt || t('receipt_missing'), cert.vatWhtReceipt || !(c.vatWht > 0) ? '' : 'neg'));
+      card.appendChild(kv(t('cash_received'), money(c.received)));
       card.appendChild(kv(t('balance_due'), money(c.balance), c.balance > 0 ? 'pos' : ''));
       cert.receipts.forEach(function (rc) {
         var r = el('div', 'pay');
@@ -1233,6 +1248,7 @@
       row.appendChild(btn(t('export_cert_xlsx'), '', function () {
         saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id));
       }));
+      row.appendChild(btn(t('tax_receipts'), '', function () { editTaxReceipts(cert); }));
       row.appendChild(btn(t('edit_cert'), '', function () { editCert(p, cert); }));
       card.appendChild(row);
       body.appendChild(card);
@@ -1241,24 +1257,31 @@
 
   function editCert(p, cert, preset) {
     var isNew = !cert;
-    var c = cert || { no: 'IPC-' + (p.certs.length + 1), date: L.todayStr(), gross: preset ? preset.gross : '', advanceRecovery: '' };
+    var c = cert || { no: 'IPC-' + (p.certs.length + 1), date: L.todayStr(), gross: preset ? preset.gross : '', advanceRecovery: 0, penalty: 0 };
+    var advModes = [{ value: 'auto', label: t('adv_auto') + ' (' + pct(p.recoveryPct) + ')' }, { value: 'manual', label: t('adv_manual') }];
     openForm({
       title: isNew ? t('add_cert') : t('edit_cert'),
       fields: [
         { key: 'no', label: t('cert_no'), type: 'text', value: c.no, max: 20 },
         { key: 'date', label: t('date'), type: 'date', value: c.date, required: true },
         { key: 'gross', label: t('gross'), type: 'number', min: 0.01, value: c.gross, required: true },
-        { key: 'advanceRecovery', label: t('advance_recovery'), type: 'number', min: 0, value: c.advanceRecovery || '' }
+        { key: 'advMode', label: t('advance_recovery'), type: 'select', options: advModes, value: isNew ? 'auto' : 'manual' },
+        { key: 'advanceRecovery', label: t('adv_manual_amount'), type: 'number', min: 0, value: c.advanceRecovery || '' },
+        { key: 'penalty', label: t('penalty'), type: 'number', min: 0, value: c.penalty || '' }
       ],
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
+        var gross = L.round2(v.gross);
+        // automatic = the project's repayment % of the work including VAT, never more than the advance still unrecovered
+        var adv = v.advMode === 'auto' ? L.suggestAdvanceRecovery(p, gross, cert ? cert.id : 0) : Math.max(0, L.round2(v.advanceRecovery));
+        var pen = Math.max(0, L.round2(v.penalty));
         if (isNew) {
-          var nc = L.sanitizeCert({ no: v.no, date: date, gross: v.gross, advanceRecovery: v.advanceRecovery, snap: L.boqSnapshot(p) });
+          var nc = L.sanitizeCert({ no: v.no, date: date, gross: v.gross, advanceRecovery: adv, penalty: pen, snap: L.boqSnapshot(p) });
           if (!nc) return t('required');
           p.certs.push(nc);
         } else {
-          cert.no = v.no.slice(0, 20); cert.date = date; cert.gross = L.round2(v.gross);
-          cert.advanceRecovery = Math.max(0, L.round2(v.advanceRecovery));
+          cert.no = v.no.slice(0, 20); cert.date = date; cert.gross = gross;
+          cert.advanceRecovery = adv; cert.penalty = pen;
         }
         save(); renderAll();
         return null;
@@ -1270,6 +1293,17 @@
         save(); renderAll();
         return true;
       }
+    });
+  }
+
+  function editTaxReceipts(cert) {
+    openForm({
+      title: t('tax_receipts'),
+      fields: [
+        { key: 'whtReceipt', label: t('wht_receipt'), type: 'text', value: cert.whtReceipt, max: 30 },
+        { key: 'vatWhtReceipt', label: t('vat_wht_receipt'), type: 'text', value: cert.vatWhtReceipt, max: 30 }
+      ],
+      onSubmit: function (v) { cert.whtReceipt = v.whtReceipt.slice(0, 30); cert.vatWhtReceipt = v.vatWhtReceipt.slice(0, 30); save(); renderAll(); return null; }
     });
   }
 
@@ -2094,7 +2128,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.0.1';
+  var APP_VERSION = '2.1.0';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });

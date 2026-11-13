@@ -263,14 +263,15 @@
     put(24, G, { v: 'Net service sum', s: box }); put(24, H, { f: 'SUM(H22:H23)', v: cumGross * (1 + vat), s: boxN });
     put(25, F, { v: 'Deductions', s: head }); put(25, G, { v: 'A=Total', s: boxB }); put(25, H, { f: 'H24', v: cumGross * (1 + vat), s: boxNB });
     var A = cumGross * (1 + vat);
-    var ret = r2(cumGross * p.retention / 100), wht = r2(cumGross * p.wht / 100);
+    // retention is held on the work including VAT; withholding tax and VAT withholding are not part of the certificate
+    var ret = r2(upto.reduce(function (a, c) { return a + L.certCalc(p, c).retention; }, 0));
+    var cumPen = r2(upto.reduce(function (a, c) { return a + (c.penalty || 0); }, 0));
     var ds = st({ h: 'left', border: 'thin' }, base);
     put(26, F, { v: '1.Previous payments (net paid)', s: ds }); put(26, G, { v: prevNet, s: boxN });
-    put(27, F, { v: '2.Retention ' + p.retention + '%', s: ds }); put(27, G, { f: p.retention / 100 + '*H22', v: ret, s: boxN });
+    put(27, F, { v: '2.Retention ' + p.retention + '%', s: ds }); put(27, G, { f: p.retention / 100 + '*H25', v: ret, s: boxN });
     put(28, F, { v: '3.Advance Repayment', s: ds }); put(28, G, { f: 'C' + aEnd, v: cumAdv, s: boxN });
-    put(29, F, { v: p.wht > 0 ? '4.Withholding tax ' + p.wht + '%' : '4.Penalty', s: ds });
-    put(29, G, p.wht > 0 ? { f: p.wht / 100 + '*H22', v: wht, s: boxN } : { s: boxN });
-    var B2 = prevNet + ret + cumAdv + wht;
+    put(29, F, { v: '4.Penalty', s: ds }); put(29, G, cumPen > 0 ? { v: cumPen, s: boxN } : { s: boxN });
+    var B2 = prevNet + ret + cumAdv + cumPen;
     put(30, F, { v: 'B = Total deductions (1 - 4)', s: st({ b: true, h: 'right' }, ds) }); put(30, G, { f: 'SUM(G26:G29)', v: B2, s: boxNB });
     var net = A - B2;
     put(31, F, { v: 'C = Net (A-B)', s: ds }); put(31, G, { s: boxN }); put(31, H, { f: 'H25-G30', v: net, s: boxN });
