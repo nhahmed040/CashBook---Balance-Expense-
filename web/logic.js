@@ -365,6 +365,7 @@
           name: str(b.name, 40) || ('Book ' + (books.length + 1)),
           projectId: pIds[b.projectId] ? b.projectId : '',
           businessId: bSeen[b.businessId] ? b.businessId : '',
+          updated: isDate(b.updated) ? b.updated : '',
           entries: uniqueEntries(b.entries).map(function (e) { if (e.contactId && !cIds[e.contactId]) e.contactId = 0; return e; })
         };
         var sy = sanitizeSync(b.sync);

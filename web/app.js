@@ -12,7 +12,7 @@
   /* ---------- state ---------- */
   var state = loadState();
   var ui = {
-    view: 'entries',
+    view: 'entries', bookOpen: false, bookQ: '', bookSort: 'updated',
     q: '', type: 'all', from: '', to: '', mode: '', by: '', category: '', contactId: 0, cq: '', ckind: 'all', rFrom: '', rTo: '', rScope: 'book',
     month: CAL.get(state.settings.calendar).monthKey(L.todayStr()),
     editingId: null,
@@ -42,8 +42,23 @@
   function saveRaw() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
   }
+  /* each book remembers the day it last changed: a cheap fingerprint of its name and entries is compared on every save */
+  var bookFp = {};
+  function fingerprint(b) {
+    var s = JSON.stringify([b.name, b.entries]), h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return h + ':' + s.length;
+  }
+  function touchBooks() {
+    state.books.forEach(function (b) {
+      var f = fingerprint(b);
+      if (bookFp[b.id] !== undefined && bookFp[b.id] !== f) b.updated = L.todayStr();
+      bookFp[b.id] = f;
+    });
+  }
   function save() {
     rev++;
+    touchBooks();
     saveRaw();
     if (window.__scheduleSync) window.__scheduleSync();
   }
@@ -1476,7 +1491,7 @@
       card.appendChild(kv(t('cash_in'), money(tot.cashIn)));
       card.appendChild(kv(t('cash_out'), money(tot.cashOut)));
       var row = el('div', 'btnrow');
-      row.appendChild(btn(t('open'), 'primary', function () { state.current = b.id; save(); showView('entries'); renderAll(); }));
+      row.appendChild(btn(t('open'), 'primary', function () { state.current = b.id; ui.bookOpen = true; save(); showView('entries'); renderAll(); }));
       row.appendChild(btn(t('unlink'), '', function () { b.projectId = ''; save(); renderAll(); }));
       card.appendChild(row);
       pn.appendChild(card);
@@ -1516,6 +1531,8 @@
     applyStaticText();
     enhanceStaticDates();
     renderBooks();
+    renderBookList();
+    applyEntriesScreen();
     renderEntries();
     renderProjects();
     renderContacts();
@@ -1535,6 +1552,7 @@
     });
     document.body.classList.remove('view-entries', 'view-contacts', 'view-projects', 'view-reports', 'view-settings');
     document.body.classList.add('view-' + name);
+    applyEntriesScreen();
     window.scrollTo(0, 0);
   }
 
@@ -2082,6 +2100,7 @@
     b.addEventListener('click', function () {
       var v = b.getAttribute('data-view');
       buzz();
+      if (v === 'entries' && ui.view === 'entries') ui.bookOpen = false;   // tapping Entries again goes back to the list of books
       showView(v);
       if (v === 'reports') renderReports();
       if (v === 'projects') renderProjects();
@@ -2136,7 +2155,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.1.1';
+  var APP_VERSION = '2.2.0';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });
@@ -2146,8 +2165,9 @@
     var name = $('bookName').value.trim().slice(0, 40);
     if (!name) { $('bookName').focus(); return; }
     var id = 'b' + L.newId();
-    state.books.push({ id: id, name: name, projectId: $('bookProject').value || '', businessId: $('bookBiz').value || state.business || '', entries: [] });
+    state.books.push({ id: id, name: name, projectId: $('bookProject').value || '', businessId: $('bookBiz').value || state.business || '', updated: L.todayStr(), entries: [] });
     state.current = id;
+    ui.bookOpen = true;
     save();
     closeModal('bookModal');
     renderAll();
@@ -2168,6 +2188,7 @@
       deletePhotoIds(entryPhotoIds(book().entries));
       state.books = state.books.filter(function (b) { return b.id !== cur; });
       state.current = state.books[0].id;
+      ui.bookOpen = false;
       save();
       closeModal('bookModal');
       renderAll();
@@ -2809,7 +2830,155 @@
     }, 1500);
   })();
 
+  /* ---------- the list of books (home of the Entries tab) ---------- */
+  function lastEntryDate(b) {
+    var d = '';
+    b.entries.forEach(function (e) { if (e.date > d) d = e.date; });
+    return d;
+  }
+  function applyEntriesScreen() {
+    $('booksHome').hidden = ui.bookOpen;
+    $('bookScreen').hidden = !ui.bookOpen;
+    document.body.classList.toggle('books-home', !ui.bookOpen);
+    if (ui.bookOpen) {
+      var b = book(), bz = b.businessId ? byId(state.businesses, b.businessId) : null;
+      $('bookTitle').textContent = b.name;
+      $('bookSub').textContent = (window.__bookIcon ? window.__bookIcon(b) : '') + (bz ? bz.name : '');
+    }
+  }
+
+  function actionSheet(title, items) {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal');
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    m.appendChild(el('h2', null, title));
+    items.forEach(function (it) {
+      m.appendChild(btn(it.label, 'block' + (it.danger ? ' danger' : ''), function () { close(); it.run(); }));
+    });
+    m.appendChild(btn(t('cancel'), 'block', close));
+    ov.appendChild(m);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.body.appendChild(ov);
+  }
+
+  function openBookById(id) {
+    state.current = id;
+    ui.bookOpen = true;
+    save();
+    renderAll();
+    window.scrollTo(0, 0);
+  }
+
+  function bookMenu(b) {
+    var items = [
+      { label: t('m_rename'), run: function () {
+        openForm({ title: t('m_rename'), fields: [{ key: 'name', label: t('book_name'), type: 'text', value: b.name, required: true, max: 40 }],
+          onSubmit: function (v) { b.name = v.name.slice(0, 40); save(); renderAll(); return null; } });
+      } },
+      { label: t('m_export'), run: function () {
+        saveFile('cashbook-' + safeName(b.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.buildCsv(b.entries));
+      } },
+      { label: t('m_share'), run: function () {
+        state.current = b.id; ui.bookOpen = false; save(); showView('settings'); renderAll();
+        var cp = $('cloudPanel'); if (cp && cp.scrollIntoView) cp.scrollIntoView();
+      } }
+    ];
+    if (state.projects.length) items.push({ label: t('m_project'), run: function () {
+      var opts = [{ value: '', label: t('no_project') }].concat(state.projects.map(function (p) { return { value: p.id, label: p.name }; }));
+      openForm({ title: t('m_project'), fields: [{ key: 'p', label: t('project'), type: 'select', options: opts, value: b.projectId || '' }],
+        onSubmit: function (v) { b.projectId = v.p; save(); renderAll(); return null; } });
+    } });
+    if (state.businesses.length) items.push({ label: t('m_business'), run: function () {
+      var opts = [{ value: '', label: t('no_business') }].concat(state.businesses.map(function (x) { return { value: x.id, label: x.name }; }));
+      openForm({ title: t('m_business'), fields: [{ key: 'b', label: t('business'), type: 'select', options: opts, value: b.businessId || '' }],
+        onSubmit: function (v) { b.businessId = v.b; save(); renderAll(); return null; } });
+    } });
+    items.push({ label: t('m_delete'), danger: true, run: function () {
+      if (state.books.length < 2) { toast(t('last_book')); return; }
+      function proceed() {
+        dropPaymentsOfBook(b.id);
+        deletePhotoIds(entryPhotoIds(b.entries));
+        state.books = state.books.filter(function (x) { return x.id !== b.id; });
+        if (state.current === b.id) state.current = state.books[0].id;
+        save(); renderAll();
+      }
+      if (b.sync && window.__cloudRelease) { window.__cloudRelease(b).then(function (ok) { if (ok) proceed(); }); return; }
+      if (window.confirm(t('confirm_delete_book'))) proceed();
+    } });
+    actionSheet(b.name, items);
+  }
+
+  function renderBookList() {
+    var bz = state.business ? byId(state.businesses, state.business) : null;
+    $('bizName').textContent = bz ? bz.name : (state.businesses.length ? t('all_businesses') : t('my_books'));
+    var sortSel = $('bookSort');
+    if (!sortSel.options.length) {
+      [['updated', t('sort_updated')], ['name', t('sort_name')], ['balance', t('sort_balance')]].forEach(function (o) { sortSel.appendChild(option(o[0], o[1])); });
+    }
+    sortSel.value = ui.bookSort;
+    var q = ui.bookQ.trim().toLowerCase();
+    var rows = visibleBooks().filter(function (b) { return !q || b.name.toLowerCase().indexOf(q) >= 0; }).map(function (b) {
+      return { b: b, bal: L.totals(b.entries).balance, upd: b.updated || lastEntryDate(b) };
+    });
+    rows.sort(function (x, y) {
+      if (ui.bookSort === 'name') return x.b.name.localeCompare(y.b.name);
+      if (ui.bookSort === 'balance') return y.bal - x.bal;
+      return (y.upd || '').localeCompare(x.upd || '') || x.b.name.localeCompare(y.b.name);
+    });
+    var ul = $('bookList');
+    ul.textContent = '';
+    rows.forEach(function (r) {
+      var li = el('li', 'bookrow');
+      li.tabIndex = 0;
+      li.appendChild(el('span', 'bicon', '📘'));
+      var mid = el('div', 'bmid');
+      mid.appendChild(el('b', 'bname', (window.__bookIcon ? window.__bookIcon(r.b) : '') + r.b.name));
+      mid.appendChild(el('small', 'bupd', r.upd ? t('updated_on') + ' ' + fmtDate(r.upd) : t('no_entries_short')));
+      li.appendChild(mid);
+      li.appendChild(el('span', 'bbal ' + (r.bal < 0 ? 'neg' : 'pos'), money(r.bal)));
+      var mb = btn('⋮', 'bmenu', function (ev) { ev.stopPropagation(); bookMenu(r.b); });
+      mb.setAttribute('aria-label', t('books'));
+      li.appendChild(mb);
+      li.addEventListener('click', function () { openBookById(r.b.id); });
+      li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') openBookById(r.b.id); });
+      ul.appendChild(li);
+    });
+    $('noBooks').hidden = rows.length > 0;
+  }
+
+  $('backBooks').addEventListener('click', function () { ui.bookOpen = false; renderAll(); window.scrollTo(0, 0); });
+  $('bookSort').addEventListener('change', function () { ui.bookSort = this.value; renderBookList(); });
+  $('bookSearchBtn').addEventListener('click', function () {
+    var inp = $('bookSearch');
+    inp.hidden = !inp.hidden;
+    if (inp.hidden) { inp.value = ''; ui.bookQ = ''; renderBookList(); } else inp.focus();
+  });
+  $('bookSearch').addEventListener('input', function () { ui.bookQ = this.value; renderBookList(); });
+  $('addBookCard').addEventListener('click', function () {
+    var fields = [{ key: 'name', label: t('book_name'), type: 'text', value: '', required: true, max: 40 }];
+    if (state.projects.length) fields.push({ key: 'p', label: t('project'), type: 'select', options: [{ value: '', label: t('no_project') }].concat(state.projects.map(function (p) { return { value: p.id, label: p.name }; })), value: '' });
+    openForm({ title: t('add_new_book'), fields: fields, onSubmit: function (v) {
+      var id = 'b' + L.newId();
+      state.books.push({ id: id, name: v.name.slice(0, 40), projectId: v.p || '', businessId: state.business || '', updated: L.todayStr(), entries: [] });
+      state.current = id; ui.bookOpen = true;
+      save(); renderAll();
+      return null;
+    } });
+  });
+  $('bizBar').addEventListener('click', function () {
+    if (!state.businesses.length) { editBusiness(null); return; }
+    var items = [{ label: t('all_businesses'), run: function () { state.business = ''; save(); renderAll(); } }];
+    state.businesses.forEach(function (x) { items.push({ label: x.name, run: function () { state.business = x.id; save(); renderAll(); } }); });
+    items.push({ label: '+ ' + t('add_business'), run: function () { editBusiness(null); } });
+    actionSheet(t('switch_business'), items);
+  });
+  $('staffBtn').addEventListener('click', function () {
+    var bz = state.business ? byId(state.businesses, state.business) : null;
+    if (!bz) { if (!state.businesses.length) editBusiness(null); else toast(t('pick_business_first')); return; }
+    editStaff(bz, null);
+  });
+
   /* ---------- start ---------- */
+  touchBooks();                      // remember how each book looks now, so only later changes count as an update
   showView('entries');
   renderAll();
   showLock();

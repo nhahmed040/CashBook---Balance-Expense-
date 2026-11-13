@@ -32,7 +32,35 @@
   <main>
     <!-- ENTRIES -->
     <section id="view-entries" class="view">
-      <button type="button" id="remindBanner" class="remind" hidden></button>
+      <div id="booksHome">
+        <button type="button" id="remindBanner" class="remind" hidden></button>
+        <div class="bizbar">
+          <button type="button" id="bizBar" class="bizcard">
+            <span class="bizicon" aria-hidden="true">🏢</span>
+            <span class="biztext"><b id="bizName"></b><small data-i18n="tap_switch_biz">Tap to switch business</small></span>
+            <span class="chev" aria-hidden="true">⌄</span>
+          </button>
+          <button type="button" id="staffBtn" class="icon staffbtn" data-i18n-aria="staff" aria-label="Staff">👥</button>
+        </div>
+        <div class="bookshead">
+          <h2 data-i18n="your_books">Your Books</h2>
+          <select id="bookSort" class="sortsel" aria-label="Sort"></select>
+          <button type="button" id="bookSearchBtn" class="icon" aria-label="Search">🔍</button>
+        </div>
+        <input type="search" id="bookSearch" data-i18n-ph="search_books" placeholder="Search books" hidden>
+        <button type="button" id="addBookCard" class="addcard">
+          <span class="addtext"><b data-i18n="add_new_book">Add New Book</b><small data-i18n="add_new_book_sub">Click to quickly add books</small></span>
+          <span class="plus" aria-hidden="true">+</span>
+        </button>
+        <ul id="bookList" class="booklist"></ul>
+        <p id="noBooks" class="empty" data-i18n="no_books_found" hidden>No books found.</p>
+      </div>
+
+      <div id="bookScreen" hidden>
+      <div class="booktitle">
+        <button type="button" id="backBooks" class="icon" data-i18n-aria="back" aria-label="Back">←</button>
+        <div class="btext"><b id="bookTitle"></b><small id="bookSub"></small></div>
+      </div>
       <div class="summary">
         <div class="card balance"><span class="label" data-i18n="balance">Net balance</span><span class="value" id="balance"></span></div>
         <div class="card in"><span class="label" data-i18n="cash_in">Cash in</span><span class="value" id="totalIn"></span></div>
@@ -69,6 +97,7 @@
 
       <ul id="list" class="list"></ul>
       <p id="empty" class="empty" data-i18n="no_entries">No entries yet. Tap + to add one.</p>
+      </div>
     </section>
 
     <!-- CONTACTS -->

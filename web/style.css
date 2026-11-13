@@ -465,3 +465,37 @@ details.more[open] > summary { margin-bottom: 8px; }
 details.more .row + .row { margin-top: 8px; }
 
 .subhead { margin: 14px 0 4px; padding-top: 10px; border-top: 1px dashed var(--line, #d9dde3); font-size: 13px; font-weight: 600; opacity: .75; text-transform: none; }
+
+/* ---- list of books (Entries tab home) ---- */
+body.view-entries .bookbar select { display: none; }
+body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { display: none; }
+.bizbar { display: flex; align-items: center; gap: 10px; padding: 4px 0 12px; border-bottom: 1px solid var(--line, #e3e6ec); }
+.bizcard { flex: 1; display: flex; align-items: center; gap: 12px; text-align: left; border: 0; background: transparent; padding: 4px 0; }
+.bizicon { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line, #d9dde3); display: grid; place-items: center; font-size: 22px; background: var(--card, #fff); }
+.biztext { display: flex; flex-direction: column; min-width: 0; }
+.biztext b { font-size: 1.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.biztext small { opacity: .65; }
+.chev { font-size: 1.3rem; opacity: .6; }
+.staffbtn { font-size: 1.4rem; }
+.bookshead { display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; }
+.bookshead h2 { flex: 1; margin: 0; font-size: 1.05rem; opacity: .75; font-weight: 600; }
+.sortsel { width: auto; max-width: 140px; padding: 6px 8px; font-size: .85rem; }
+#bookSearch { margin-bottom: 8px; }
+.addcard { width: 100%; display: flex; align-items: center; justify-content: space-between; text-align: left; padding: 16px 18px; margin: 4px 0 8px; border: 1px solid var(--line, #d9dde3); border-radius: 16px; background: var(--card, #fff); }
+.addtext { display: flex; flex-direction: column; gap: 4px; }
+.addtext b { font-size: 1.15rem; } .addtext small { opacity: .65; }
+.plus { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-size: 2rem; background: rgba(90, 79, 240, .14); color: #4f46e5; }
+.booklist { list-style: none; margin: 0; padding: 0; }
+.bookrow { display: flex; align-items: center; gap: 14px; padding: 14px 2px; border-bottom: 1px solid var(--line, #e3e6ec); cursor: pointer; }
+.bookrow:active { background: rgba(90, 79, 240, .06); }
+.bicon { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; background: rgba(90, 79, 240, .14); }
+.bmid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.bname { font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
+.bupd { opacity: .65; }
+.bbal { flex: none; align-self: flex-start; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bbal.neg { color: var(--out, #c0392b); } .bbal.pos { color: var(--in, #1e8e3e); }
+.bmenu { flex: none; align-self: flex-start; border: 0; background: transparent; font-size: 1.4rem; padding: 0 6px; line-height: 1; }
+.booktitle { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }
+.booktitle .btext { display: flex; flex-direction: column; min-width: 0; }
+.booktitle .btext b { font-size: 1.15rem; overflow-wrap: anywhere; } .booktitle .btext small { opacity: .65; }
+.sheetov .modal button { margin-top: 8px; }

@@ -41,6 +41,10 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 - **Excel exports in your own layout**: the Interim Payment Certificate (Certificate, Summary and BOQ sheets) and the Summary BOQ follow the Gamachis workbooks, with live formulas. Previous / Current / Total-to-date quantities come from the certificates already issued.
 - Staff roles inside a business are a directory. Access to a book is still controlled by sharing that book (edit or view).
 
+## The Entries tab (2.2)
+
+The Entries tab opens on a list of your books, newest change first: a business switcher with a staff button, sort (last updated, name, balance), book search, an "Add new book" card, and one row per book with its balance and last update date. Tap a row to open that book's entries (the arrow or the Entries tab brings you back). The three-dot menu on each row has rename, export, share with people, link to a project, move to a business and delete.
+
 ## Payment certificate rules (2.1)
 
 - BoQ quantities and unit rates keep up to 6 decimals (rates from a rate analysis such as 515.58522 are not rounded to 2), and totals add the unrounded line amounts like a spreadsheet, so they match your Excel BoQ.
