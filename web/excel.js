@@ -41,6 +41,7 @@
     var cell = { sz: 12, font: T, border: 'thin' };
     var text = st({ wrap: true, v: 'top' }, cell);
     var num = st({ fmt: MONEY, h: 'right' }, cell);
+    var rateS = st({ fmt: '#,##0.00###', h: 'right' }, cell);
     var qty = st({ fmt: QTY, h: 'right' }, cell);
     var bold = st({ b: true }, cell);
     var secs = L.boqSections(p), r = 9, sectionRows = [];
@@ -64,7 +65,7 @@
         put(r, 1, { v: it.desc, s: text });
         put(r, 2, { v: it.unit, s: st({ h: 'center', v: 'top' }, cell) });
         put(r, 3, { v: it.qty, s: qty });
-        put(r, 4, { v: it.rate, s: num });
+        put(r, 4, { v: it.rate, s: rateS });
         put(r, 5, { f: 'E' + r + '*D' + r, v: amt, s: num });
         put(r, 6, { v: pr.prev || null, s: qty });
         put(r, 7, { v: pr.cur || null, s: qty });

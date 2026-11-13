@@ -40,6 +40,16 @@
   }
   function validId(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
   function round3(n) { return Math.round(n * 1000) / 1000; }
+  function round6(n) { return Math.round(n * 1e6) / 1e6; }
+  /* BoQ quantities and unit rates keep up to 6 decimals (rates from a rate analysis are often like 515.58522);
+     rounding them to 2 decimals shifts the totals. */
+  function num6(v, min) { var n = Number(v); if (!isFinite(n) || n < min) n = min; return round6(n); }
+  /* A rate as text: at least 2 and at most 6 decimals, no trailing zeros beyond 2. */
+  function rateStr(n) {
+    var x = round6(Number(n) || 0), t = x.toFixed(6).replace(/0+$/, '');
+    var d = t.split('.'); if (d[1].length < 2) d[1] = (d[1] + '00').slice(0, 2);
+    return d[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + d[1];
+  }
   function num3(v, min) {
     var n = Number(v);
     if (!isFinite(n) || n < min) n = min;
@@ -155,15 +165,18 @@
     var out = {}, n = 0;
     if (m && typeof m === 'object') Object.keys(m).forEach(function (k) {
       var v = Number(m[k]);
-      if (n < 3000 && /^\d{1,20}$/.test(k) && isFinite(v) && v > 0) { out[k] = round3(v); n++; }
+      if (n < 3000 && /^\d{1,20}$/.test(k) && isFinite(v) && v > 0) { out[k] = round6(v); n++; }
     });
     return out;
   }
 
   /* Advance payment received: a % of the contract sum (the amount follows the %). Older data that only has an
      amount keeps that amount, and gets the % worked out from it. */
+  /* Contract sum including VAT: the base for the advance payment received. */
+  function contractWithVat(p) { return round2(num(p.contractSum, 0) * (1 + num(p.vat, 0, 100) / 100)); }
+
   function advanceOf(p) {
-    var cs = num(p.contractSum, 0), amount = num(p.advance, 0), pct;
+    var cs = contractWithVat(p), amount = num(p.advance, 0), pct;
     var given = p.advancePct != null && p.advancePct !== '' && isFinite(Number(p.advancePct));
     if (given) pct = Math.min(100, Math.max(0, Math.round(Number(p.advancePct) * 1e6) / 1e6));
     else pct = cs > 0 ? Math.min(100, Math.round(amount / cs * 1e8) / 1e6) : 0;
@@ -217,9 +230,9 @@
       no: str(i.no, 20),
       desc: desc,
       unit: str(i.unit, 12),
-      qty: num3(i.qty, 0),
-      rate: num(i.rate, 0),
-      done: num3(i.done, 0)
+      qty: num6(i.qty, 0),
+      rate: num6(i.rate, 0),
+      done: num6(i.done, 0)
     };
   }
 
@@ -771,10 +784,12 @@
   /* ---------- bill of quantities ---------- */
   function itemAmount(i) { return round2(i.qty * i.rate); }
   function itemEarned(i) { return round2(i.done * i.rate); }
+  // totals add the unrounded line amounts and round once at the end, like a spreadsheet SUM
+  function rawSum(list, f) { return round2(list.reduce(function (a, i) { return a + f(i); }, 0)); }
   function isHeading(i) { return !(i.qty > 0) && !(i.rate > 0); }
 
   function boqSummary(project) {
-    var total = sum(project.boq, itemAmount), earned = sum(project.boq, itemEarned);
+    var total = rawSum(project.boq, function (i) { return i.qty * i.rate; }), earned = rawSum(project.boq, function (i) { return i.done * i.rate; });
     return {
       total: total, earned: earned,
       pct: total > 0 ? round2(earned / total * 100) : 0,
@@ -825,7 +840,7 @@
     return project.boq.map(function (item) {
       var total = totalMap[item.id] || 0, prev = prevMap[item.id] || 0;
       if (prev > total) prev = total;
-      return { item: item, prev: prev, cur: round3(total - prev), total: total };
+      return { item: item, prev: prev, cur: round6(total - prev), total: total };
     });
   }
 
@@ -877,7 +892,7 @@
     var rows = [['No', 'Description', 'Unit', 'Qty', 'Rate', 'Amount', 'Done', 'Value done', 'Done %']];
     project.boq.forEach(function (i) {
       if (isHeading(i)) { rows.push([i.no, i.desc, '', '', '', '', '', '', '']); return; }
-      rows.push([i.no, i.desc, i.unit, String(i.qty), i.rate.toFixed(2), itemAmount(i).toFixed(2), String(i.done),
+      rows.push([i.no, i.desc, i.unit, String(i.qty), String(round6(i.rate)), itemAmount(i).toFixed(2), String(i.done),
         itemEarned(i).toFixed(2), i.qty > 0 ? String(round2(i.done / i.qty * 100)) : '']);
     });
     var s = boqSummary(project);
@@ -933,7 +948,7 @@
     billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
-    sanitizeBoqItem: sanitizeBoqItem, itemAmount: itemAmount, itemEarned: itemEarned, isHeading: isHeading,
+    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, isHeading: isHeading,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds

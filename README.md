@@ -43,8 +43,10 @@ A simple, offline cash book for Android (and the browser). Record cash in and ca
 
 ## Payment certificate rules (2.1)
 
+- BoQ quantities and unit rates keep up to 6 decimals (rates from a rate analysis such as 515.58522 are not rounded to 2), and totals add the unrounded line amounts like a spreadsheet, so they match your Excel BoQ.
+
 - Net payable = work including VAT − retention (% of work including VAT) − advance repayment − penalty
-- Advance payment received (default 20% of the contract sum) and advance repayment (default 20% of the work including VAT, never more than the advance still unrecovered) are set in the project details; repayment can be overwritten on each certificate. Penalty is an amount on each certificate.
+- Advance payment received (default 20% of the contract sum **including VAT**; the Overview shows the contract sum, the VAT and the sum including VAT) and advance repayment (default 20% of the work including VAT, never more than the advance still unrecovered) are set in the project details; repayment can be overwritten on each certificate. Penalty is an amount on each certificate.
 - Withholding tax (default 3% of the work before VAT) and withheld VAT (50% of the VAT, 7.5% at 15% VAT) are not part of the certificate. They are deducted after the net payable, in the app only: cash to receive = net payable − both. The client's receipt numbers for each are recorded under "Tax receipts".
 - The printed and Excel certificates do not show withholding.
 

@@ -402,7 +402,7 @@
       t: t, money: money, lang: state.settings.lang, project: p, cert: cert,
       calc: L.certCalc(p, cert), seq: L.certCumulative(p, cert.id), boq: p.boq.length ? p.boq : null, date: L.todayStr(),
       fmt: function (d) { return fmtDate(d, true); },
-      itemAmount: L.itemAmount, itemEarned: L.itemEarned, isHeading: L.isHeading
+      itemAmount: L.itemAmount, rateStr: L.rateStr, itemEarned: L.itemEarned, isHeading: L.isHeading
     }));
   }
 
@@ -803,6 +803,11 @@
     if (p.location) c.appendChild(kv(t('location'), p.location));
     if (p.startDate || p.endDate) c.appendChild(kv(t('start_date') + ' – ' + t('end_date'), (p.startDate ? fmtDate(p.startDate) : '…') + ' → ' + (p.endDate ? fmtDate(p.endDate) : '…')));
     c.appendChild(kv(t('contract_sum'), money(s.contractSum)));
+    if (p.vat > 0 && s.contractSum > 0) {
+      c.appendChild(kv('+ ' + t('vat_amt') + ' (' + pct(p.vat) + ')', money(L.round2(L.contractWithVat(p) - s.contractSum))));
+      c.appendChild(kv(t('contract_incl_vat'), money(L.contractWithVat(p)), 'total'));
+      c.appendChild(kv(t('advance_paid') + ' (' + pct(p.advancePct) + ')', money(p.advance)));
+    }
     c.appendChild(kv(t('certified'), money(s.certified) + ' (' + pct(s.pctComplete) + ' ' + t('pct_complete') + ')'));
     if (s.boqTotal > 0) c.appendChild(kv(t('physical_pct'), pct(s.physicalPct)));
     c.appendChild(kv(t('received'), money(s.received)));
@@ -901,7 +906,7 @@
       var top = el('div', 'boqtop');
       var meta = el('div', 'meta');
       meta.appendChild(el('div', 'title', label));
-      meta.appendChild(el('div', 'detail', it.qty + ' ' + it.unit + ' × ' + money(it.rate) + ' = ' + money(L.itemAmount(it))));
+      meta.appendChild(el('div', 'detail', it.qty + ' ' + it.unit + ' × ' + L.rateStr(it.rate) + ' = ' + money(L.itemAmount(it))));
       top.appendChild(meta);
       top.addEventListener('click', function () { editBoqItem(p, it); });
       r.appendChild(top);
@@ -913,7 +918,7 @@
       inp.setAttribute('aria-label', it.desc + ' – ' + t('done_to_date'));
       inp.addEventListener('change', function () {
         var v = parseFloat(inp.value);
-        it.done = isFinite(v) && v > 0 ? Math.round(v * 1000) / 1000 : 0;
+        it.done = isFinite(v) && v > 0 ? Math.round(v * 1e6) / 1e6 : 0;
         save(); renderProjects();
       });
       dn.appendChild(inp);
@@ -948,7 +953,7 @@
           p.boq.push(ni);
         } else {
           it.no = v.no.slice(0, 20); it.desc = v.desc.slice(0, 120); it.unit = v.unit.slice(0, 12);
-          it.qty = Math.max(0, Math.round(v.qty * 1000) / 1000); it.rate = Math.max(0, L.round2(v.rate));
+          it.qty = Math.max(0, Math.round(v.qty * 1e6) / 1e6); it.rate = Math.max(0, Math.round(v.rate * 1e6) / 1e6);
         }
         save(); renderAll();
         return null;
@@ -1050,8 +1055,10 @@
     p.advancePct = Math.min(100, Math.max(0, Math.round(v.advancePct * 1e6) / 1e6));
     p.recoveryPct = Math.min(100, Math.max(0, L.round2(v.recoveryPct)));
     p.vatWhtPct = Math.min(100, Math.max(0, L.round2(v.vatWhtPct)));
-    p.advance = p.contractSum > 0 ? L.round2(p.contractSum * p.advancePct / 100) : p.advance;
-    p.vat = Math.min(100, Math.max(0, L.round2(v.vat))); p.wht = Math.min(100, Math.max(0, L.round2(v.wht)));
+    p.vat = Math.min(100, Math.max(0, L.round2(v.vat)));
+    // the advance received is a % of the contract sum including VAT
+    p.advance = p.contractSum > 0 ? L.round2(L.contractWithVat(p) * p.advancePct / 100) : p.advance;
+    p.wht = Math.min(100, Math.max(0, L.round2(v.wht)));
     p.retention = Math.min(100, Math.max(0, L.round2(v.retention)));
     p.contractor = v.contractor.slice(0, 60); p.variation = Math.max(0, L.round2(v.variation)); p.rebate = Math.min(100, Math.max(0, L.round2(v.rebate)));
     p.startDate = L.isDate(v.startDate) ? v.startDate : '';
@@ -1199,6 +1206,7 @@
     var s = L.projectSummary(state, p.id);
     var info = panel(t('client_section'));
     info.appendChild(kv(t('contract_sum'), money(p.contractSum)));
+    if (p.vat > 0 && p.contractSum > 0) info.appendChild(kv(t('contract_incl_vat'), money(L.contractWithVat(p))));
     info.appendChild(kv(t('advance_paid') + ' (' + pct(p.advancePct) + ')', money(p.advance)));
     info.appendChild(kv(t('recovery_pct'), pct(p.recoveryPct)));
     info.appendChild(kv(t('vat_pct'), pct(p.vat)));
@@ -2128,7 +2136,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.1.0';
+  var APP_VERSION = '2.1.1';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });

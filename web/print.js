@@ -93,10 +93,10 @@
           h += '<tr class="head"><td>' + esc(i.no) + '</td><td colspan="6">' + esc(i.desc) + '</td></tr>';
           return;
         }
-        total += d.itemAmount(i);
-        earned += d.itemEarned(i);
+        total += i.qty * i.rate;
+        earned += i.done * i.rate;
         h += '<tr><td>' + esc(i.no) + '</td><td>' + esc(i.desc) + '</td><td>' + esc(i.unit) + '</td><td class="n">' + esc(i.qty) +
-          '</td><td class="n">' + esc(m(i.rate)) + '</td><td class="n">' + esc(i.done) + '</td><td class="n">' + esc(m(d.itemEarned(i))) + '</td></tr>';
+          '</td><td class="n">' + esc(d.rateStr ? d.rateStr(i.rate) : m(i.rate)) + '</td><td class="n">' + esc(i.done) + '</td><td class="n">' + esc(m(d.itemEarned(i))) + '</td></tr>';
       });
       h += '<tr class="total"><td colspan="6">' + esc(t('work_value')) + ' / ' + esc(t('boq_total')) + ': ' + esc(m(total)) + '</td><td class="n">' + esc(m(earned)) + '</td></tr></tbody></table>';
     }
