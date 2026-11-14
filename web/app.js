@@ -417,7 +417,7 @@
       t: t, money: money, lang: state.settings.lang, project: p, cert: cert,
       calc: L.certCalc(p, cert), seq: L.certCumulative(p, cert.id), boq: p.boq.length ? p.boq : null, date: L.todayStr(),
       fmt: function (d) { return fmtDate(d, true); },
-      itemAmount: L.itemAmount, rateStr: L.rateStr, itemEarned: L.itemEarned, isHeading: L.isHeading
+      itemAmount: L.itemAmount, rateStr: L.rateStr, itemEarned: L.itemEarned, isHeading: L.isHeading, isSumRow: L.isSumRow
     }));
   }
 
@@ -895,6 +895,7 @@
     }));
     var row = el('div', 'btnrow');
     row.appendChild(btn(t('add_item'), '', function () { editBoqItem(p, null); }));
+    row.appendChild(btn(t('add_sum_row'), '', function () { editSumRow(p, null, p.boq.length); }));
     row.appendChild(btn(t('import_boq'), '', function () { boqTarget = p; $('boqFile').click(); }));
     if (p.boq.length) row.appendChild(btn(t('export_boq'), '', function () {
       saveFile('cashbook-boq-' + safeName(p.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.boqCsv(p));
@@ -908,12 +909,32 @@
 
     if (!p.boq.length) { body.appendChild(el('p', 'empty', t('no_items'))); return; }
     var list = panel(null);
-    p.boq.forEach(function (it) {
+    var subs = L.boqSubtotals(p);
+    p.boq.forEach(function (it, pos) {
       var label = (it.no ? it.no + '  ' : '') + it.desc;
+      function menuBtn() {
+        var mb = btn('⋯', 'boqmenu', function (e) { if (e) e.stopPropagation(); boqRowMenu(p, it, pos); });
+        mb.setAttribute('aria-label', t('row_menu'));
+        return mb;
+      }
+      if (L.isSumRow(it)) {
+        var sr = el('div', 'boqrow heading sumrow');
+        var st = el('div', 'boqtop');
+        var sm2 = el('div', 'meta');
+        sm2.appendChild(el('div', 'title', it.desc));
+        sm2.appendChild(el('div', 'detail', money(subs[it.id].amt) + (subs[it.id].earned > 0 ? ' · ' + t('work_value') + ': ' + money(subs[it.id].earned) : '')));
+        st.appendChild(sm2);
+        st.addEventListener('click', function () { editSumRow(p, it); });
+        sr.appendChild(st);
+        sr.appendChild(menuBtn());
+        list.appendChild(sr);
+        return;
+      }
       if (L.isHeading(it)) {
         var h = el('div', 'boqrow heading', label);
         h.style.cursor = 'pointer';
         h.addEventListener('click', function () { editBoqItem(p, it); });
+        h.appendChild(menuBtn());
         list.appendChild(h);
         return;
       }
@@ -924,6 +945,7 @@
       meta.appendChild(el('div', 'detail', it.qty + ' ' + it.unit + ' × ' + L.rateStr(it.rate) + ' = ' + money(L.itemAmount(it))));
       top.appendChild(meta);
       top.addEventListener('click', function () { editBoqItem(p, it); });
+      top.appendChild(menuBtn());
       r.appendChild(top);
 
       var dn = el('div', 'boqdone');
@@ -948,7 +970,55 @@
     body.appendChild(list);
   }
 
-  function editBoqItem(p, it) {
+  /* Row menu: insert anywhere, move, edit, delete (like a spreadsheet). */
+  function boqRowMenu(p, it, pos) {
+    var title = L.isSumRow(it) ? it.desc : ((it.no ? it.no + ' ' : '') + it.desc);
+    var items = [
+      { label: t('edit_item'), run: function () { if (L.isSumRow(it)) editSumRow(p, it); else editBoqItem(p, it); } },
+      { label: t('insert_above'), run: function () { editBoqItem(p, null, pos); } },
+      { label: t('insert_below'), run: function () { editBoqItem(p, null, pos + 1); } },
+      { label: t('sum_above'), run: function () { editSumRow(p, null, pos); } },
+      { label: t('sum_below'), run: function () { editSumRow(p, null, pos + 1); } }
+    ];
+    if (pos > 0) items.push({ label: t('move_up'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos - 1, 0, it); save(); renderAll(); } });
+    if (pos < p.boq.length - 1) items.push({ label: t('move_down'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos + 1, 0, it); save(); renderAll(); } });
+    items.push({ label: t('delete'), danger: true, run: function () {
+      if (!window.confirm(t('cf_delete_row', { name: title }))) return;
+      p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
+      save(); renderAll();
+    } });
+    actionSheet(title, items);
+  }
+
+  /* Summary row: adds up the items above it, back to the previous summary row. */
+  function editSumRow(p, it, pos) {
+    var isNew = !it;
+    openForm({
+      title: t('sum_row'),
+      fields: [
+        { key: 'desc', label: t('sum_label'), type: 'text', value: it ? it.desc : t('sum_default'), max: 120, required: true },
+        { type: 'note', text: t('sum_note') }
+      ],
+      onSubmit: function (v) {
+        if (isNew) {
+          if (p.boq.length >= 3000) return t('required');
+          var ni = L.sanitizeBoqItem({ kind: 'sum', desc: v.desc });
+          if (!ni) return t('required');
+          p.boq.splice(pos == null ? p.boq.length : Math.max(0, Math.min(pos, p.boq.length)), 0, ni);
+        } else it.desc = v.desc.slice(0, 120);
+        save(); renderAll();
+        return null;
+      },
+      onDelete: isNew ? null : function () {
+        if (!window.confirm(t('cf_delete_row', { name: it.desc }))) return false;
+        p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
+        save(); renderAll();
+        return true;
+      }
+    });
+  }
+
+  function editBoqItem(p, it, pos) {
     var isNew = !it;
     var x = it || { no: '', desc: '', unit: '', qty: '', rate: '' };
     openForm({
@@ -965,7 +1035,7 @@
         if (isNew) {
           var ni = L.sanitizeBoqItem({ no: v.no, desc: v.desc, unit: v.unit, qty: v.qty, rate: v.rate });
           if (!ni) return t('required');
-          p.boq.push(ni);
+          if (pos == null) p.boq.push(ni); else p.boq.splice(Math.max(0, Math.min(pos, p.boq.length)), 0, ni);
         } else {
           it.no = v.no.slice(0, 20); it.desc = v.desc.slice(0, 120); it.unit = v.unit.slice(0, 12);
           it.qty = Math.max(0, Math.round(v.qty * 1e6) / 1e6); it.rate = Math.max(0, Math.round(v.rate * 1e6) / 1e6);
@@ -974,7 +1044,7 @@
         return null;
       },
       onDelete: isNew ? null : function () {
-        if (!window.confirm(t('confirm_delete_item'))) return false;
+        if (!window.confirm(t('cf_delete_row', { name: (it.no ? it.no + ' ' : '') + it.desc }))) return false;
         p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
         save(); renderAll();
         return true;
@@ -1199,6 +1269,7 @@
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
         var amount = L.round2(v.amount);
+        if (!window.confirm(t('cf_pay_bill', { amount: money(amount), name: bill.supplier || bill.desc || '' }))) return '\u00a0';
         var pay = { id: L.newId(), date: date, amount: amount, entryId: 0, bookId: '' };
         var target = v.bookId ? bookById(v.bookId) : null;
         if (target) {
@@ -1343,6 +1414,7 @@
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
         var amount = L.round2(v.amount);
+        if (!window.confirm(t('cf_receive', { amount: money(amount), name: cert.no || t('client') }))) return '\u00a0';
         var rc = { id: L.newId(), date: date, amount: amount, entryId: 0, bookId: '' };
         var target = v.bookId ? bookById(v.bookId) : null;
         if (target) {
@@ -1464,6 +1536,7 @@
       ],
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
+        if (!window.confirm(t('cf_wages', { total: money(pr.total), from: fmtDate(wk.from), to: fmtDate(wk.to) }))) return '\u00a0';
         var target = v.bookId ? bookById(v.bookId) : null;
         if (target) {
           target.entries.push(L.sanitizeEntry({
@@ -2155,7 +2228,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.2.0';
+  var APP_VERSION = '2.3.0';
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });
@@ -2264,6 +2337,7 @@
     renderSettings();
   });
   $('removePinBtn').addEventListener('click', function () {
+    if (!window.confirm(t('cf_remove_pin'))) return;
     state.settings.pinHash = '';
     state.settings.pinSalt = '';
     save();
@@ -2755,6 +2829,7 @@
               }));
             }
             P.appendChild(btn(t('revoke_invites'), 'block', function () {
+              if (!window.confirm(t('cf_revoke', { name: b.name }))) return;
               cloud.revokeInvites(sy.id).then(function () { invite = ''; toast(t('invites_revoked')); renderCloud(); }, fail);
             }));
             if (inf) {
@@ -2769,6 +2844,7 @@
                 sel.addEventListener('change', function () { cloud.setRole(sy.id, uid, this.value).then(function () { m.role = sel.value; }, fail); });
                 acts.appendChild(sel);
                 acts.appendChild(btn(t('remove'), 'danger', function () {
+                  if (!window.confirm(t('cf_remove_member', { name: m.name || m.email || uid, book: b.name }))) return;
                   cloud.removeMember(sy.id, uid).then(function () { delete inf.members[uid]; renderCloud(); renderBooks(); }, fail);
                 }));
                 r2.appendChild(acts);
@@ -2784,7 +2860,7 @@
         P.appendChild(field(t('join_ph'), 'text', '', 'cJoin'));
         P.appendChild(btn(t('join'), 'block primary', function () { joinBook(val('cJoin')); }));
         if (status) P.appendChild(el('p', 'muted small', status));
-        P.appendChild(btn(t('sign_out'), 'block', function () { cloud.signOut(); invite = ''; status = ''; renderAll(); }));
+        P.appendChild(btn(t('sign_out'), 'block', function () { if (!window.confirm(t('cf_signout'))) return; cloud.signOut(); invite = ''; status = ''; renderAll(); }));
       }
 
       P.appendChild(btn(t('show_rules'), 'block', function () { rulesShown = !rulesShown; renderCloud(); }));

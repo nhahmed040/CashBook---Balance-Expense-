@@ -53,8 +53,22 @@
       r++;
       if (sec.group) { sectionRows.push({ row: 0, title: sec.title, group: true }); return; }
       var first = r, sum = { amt: 0, prev: 0, cur: 0, to: 0 };
+      var segStart = r, seg = { amt: 0, prev: 0, cur: 0, to: 0 }, segs = [];
+      var SC = [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']];
       sec.items.forEach(function (idx) {
         var pr = progress[idx], it = pr.item;
+        if (L.isSumRow(it)) {
+          var segEnd = r - 1, sty = st({ fmt: MONEY, h: 'right', b: true, fill: SEC_FILL }, cell);
+          put(r, 0, { s: st({ fill: SEC_FILL }, bold) }); put(r, 1, { v: it.desc, s: st({ h: 'right', fill: SEC_FILL }, bold) });
+          for (var kk = 2; kk <= 4; kk++) put(r, kk, { s: st({ fill: SEC_FILL }, cell) });
+          SC.forEach(function (c) {
+            put(r, c[1], { f: segStart <= segEnd ? 'SUM(' + c[0] + segStart + ':' + c[0] + segEnd + ')' : '0', v: seg[c[2]], s: sty });
+          });
+          [6, 7, 8].forEach(function (k5) { put(r, k5, { s: st({ fill: SEC_FILL }, cell) }); });
+          if (segStart <= segEnd) segs.push([segStart, segEnd, seg]);
+          segStart = r + 1; seg = { amt: 0, prev: 0, cur: 0, to: 0 };
+          r++; return;
+        }
         if (L.isHeading(it)) {
           put(r, 0, { v: it.no, s: cell }); put(r, 1, { v: it.desc, s: bold });
           for (var k2 = 2; k2 <= 11; k2++) put(r, k2, { s: cell });
@@ -74,13 +88,15 @@
         put(r, 10, { f: 'E' + r + '*H' + r, v: curA, s: num });
         put(r, 11, { f: 'J' + r + '+K' + r, v: prevA + curA, s: num });
         sum.amt += amt; sum.prev += prevA; sum.cur += curA; sum.to += prevA + curA;
+        seg.amt += amt; seg.prev += prevA; seg.cur += curA; seg.to += prevA + curA;
         r++;
       });
       var last = r - 1;
+      if (segStart <= last) segs.push([segStart, last, seg]);
       put(r, 0, { s: bold }); put(r, 1, { v: 'Total carried to summary', s: st({ h: 'right' }, bold) });
       for (var k3 = 2; k3 <= 4; k3++) put(r, k3, { s: cell });
       [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']].forEach(function (c) {
-        put(r, c[1], { f: first <= last ? 'SUM(' + c[0] + first + ':' + c[0] + last + ')' : '0', v: sum[c[2]], s: st({ fmt: MONEY, h: 'right', b: true }, cell) });
+        put(r, c[1], { f: segs.length ? segs.map(function (g) { return 'SUM(' + c[0] + g[0] + ':' + c[0] + g[1] + ')'; }).join('+') : '0', v: sum[c[2]], s: st({ fmt: MONEY, h: 'right', b: true }, cell) });
       });
       [6, 7, 8].forEach(function (k4) { put(r, k4, { s: cell }); });
       sectionRows.push({ row: r, title: sec.title, group: false, sum: sum });

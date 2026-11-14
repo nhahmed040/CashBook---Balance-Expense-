@@ -69,6 +69,13 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 
 > Updating from 1.1 or 1.2 to 1.3 keeps all your data. Versions before 1.1 were signed with a throwaway key. To move from one of those, **export your data first** (Settings → Export this book, per book), uninstall the old app, install 1.1, then use **Restore from file** to import the CSV.
 
+## BoQ editing, summary rows and confirmations (2.3)
+
+- Every BoQ row has a **⋯** menu: edit, insert item above or below, insert summary row above or below, move up or down, delete. **Add item** still adds at the bottom and numbers are never changed for you.
+- A **summary row** (default label “Total carried to summary”) adds up every item above it, back to the previous summary row. It is not counted again in the BoQ total. It shows in the app, print, CSV (marker `SUM` in the No column) and the Excel BoQ (live `SUM` formula); section totals in Summary BOQ skip it.
+- “Received (incl. advance and tax withheld)” = advance + cash received on certificates + withholding tax + VAT withheld.
+- Actions that cannot be undone now ask first and name what is affected: mark wages paid, receive payment, pay a bill, delete a BoQ row, remove a member from a shared book, revoke invite codes, sign out, remove the PIN.
+
 ## Build locally
 
 Needs JDK 17, the Android SDK and Gradle 8.7:

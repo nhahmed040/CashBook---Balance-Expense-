@@ -87,14 +87,20 @@
       h += '<h2 class="pb">' + esc(t('work_done')) + '</h2><table><thead><tr><th>' + esc(t('item_no')) + '</th><th>' + esc(t('item_desc')) +
         '</th><th>' + esc(t('unit')) + '</th><th class="n">' + esc(t('qty')) + '</th><th class="n">' + esc(t('rate')) +
         '</th><th class="n">' + esc(t('done_to_date')) + '</th><th class="n">' + esc(t('amount')) + '</th></tr></thead><tbody>';
-      var total = 0, earned = 0;
+      var total = 0, earned = 0, runA = 0, runE = 0;
       d.boq.forEach(function (i) {
+        if (d.isSumRow && d.isSumRow(i)) {
+          h += '<tr class="head"><td></td><td colspan="5">' + esc(i.desc) + ': ' + esc(m(runA)) + '</td><td class="n">' + esc(m(runE)) + '</td></tr>';
+          runA = 0; runE = 0;
+          return;
+        }
         if (d.isHeading(i)) {
           h += '<tr class="head"><td>' + esc(i.no) + '</td><td colspan="6">' + esc(i.desc) + '</td></tr>';
           return;
         }
         total += i.qty * i.rate;
         earned += i.done * i.rate;
+        runA += i.qty * i.rate; runE += i.done * i.rate;
         h += '<tr><td>' + esc(i.no) + '</td><td>' + esc(i.desc) + '</td><td>' + esc(i.unit) + '</td><td class="n">' + esc(i.qty) +
           '</td><td class="n">' + esc(d.rateStr ? d.rateStr(i.rate) : m(i.rate)) + '</td><td class="n">' + esc(i.done) + '</td><td class="n">' + esc(m(d.itemEarned(i))) + '</td></tr>';
       });

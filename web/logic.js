@@ -225,7 +225,7 @@
     if (!i || typeof i !== 'object') return null;
     var desc = str(i.desc, 120);
     if (!desc) return null;
-    return {
+    var out = {
       id: validId(i.id) ? i.id : newId(),
       no: str(i.no, 20),
       desc: desc,
@@ -234,6 +234,8 @@
       rate: num6(i.rate, 0),
       done: num6(i.done, 0)
     };
+    if (i.kind === 'sum') { out.kind = 'sum'; out.no = ''; out.unit = ''; out.qty = 0; out.rate = 0; out.done = 0; }
+    return out;
   }
 
   function sanitizeProject(p, n) {
@@ -696,7 +698,7 @@
       retentionHeld: sum(calcs, function (c) { return c.retention; }),
       advance: p.advance, advanceRecovered: advanceRecovered, advanceBalance: round2(p.advance - advanceRecovered),
       payableTotal: payableTotal,
-      received: round2(p.advance + receivedCerts),
+      received: round2(p.advance + receivedCerts + sum(calcs, function (c) { return c.wht + c.vatWht; })),
       taxWithheld: sum(calcs, function (c) { return c.wht + c.vatWht; }),
       clientOutstanding: round2(sum(calcs, function (c) { return c.cashDue; }) - receivedCerts),
       costByCode: costByCode, costTotal: costTotal,
@@ -769,7 +771,7 @@
     rows.push([]);
     rows.push(['Contract sum', p.contractSum.toFixed(2)]);
     rows.push(['Certified (gross)', s.certified.toFixed(2)]);
-    rows.push(['Received (incl. advance)', s.received.toFixed(2)]);
+    rows.push(['Received (incl. advance and tax withheld)', s.received.toFixed(2)]);
     rows.push(['Due from client', s.clientOutstanding.toFixed(2)]);
     rows.push(['Retention held', s.retentionHeld.toFixed(2)]);
     rows.push(['Owed to suppliers and workers', s.owed.toFixed(2)]);
@@ -787,14 +789,25 @@
   function itemEarned(i) { return round2(i.done * i.rate); }
   // totals add the unrounded line amounts and round once at the end, like a spreadsheet SUM
   function rawSum(list, f) { return round2(list.reduce(function (a, i) { return a + f(i); }, 0)); }
-  function isHeading(i) { return !(i.qty > 0) && !(i.rate > 0); }
+  function isSumRow(i) { return i.kind === 'sum'; }
+  function isHeading(i) { return i.kind !== 'sum' && !(i.qty > 0) && !(i.rate > 0); }
+  /* Summary rows add up the items above them back to the previous summary row (or the top of the list).
+     Returns { id: { amt, earned } }. Summary rows are never part of the grand total. */
+  function boqSubtotals(project) {
+    var out = {}, amt = 0, earned = 0;
+    project.boq.forEach(function (i) {
+      if (isSumRow(i)) { out[i.id] = { amt: round2(amt), earned: round2(earned) }; amt = 0; earned = 0; }
+      else { amt += i.qty * i.rate; earned += i.done * i.rate; }
+    });
+    return out;
+  }
 
   function boqSummary(project) {
     var total = rawSum(project.boq, function (i) { return i.qty * i.rate; }), earned = rawSum(project.boq, function (i) { return i.done * i.rate; });
     return {
       total: total, earned: earned,
       pct: total > 0 ? round2(earned / total * 100) : 0,
-      count: project.boq.filter(function (i) { return !isHeading(i); }).length
+      count: project.boq.filter(function (i) { return !isHeading(i) && !isSumRow(i); }).length
     };
   }
 
@@ -891,7 +904,9 @@
 
   function boqCsv(project) {
     var rows = [['No', 'Description', 'Unit', 'Qty', 'Rate', 'Amount', 'Done', 'Value done', 'Done %']];
+    var subs = boqSubtotals(project);
     project.boq.forEach(function (i) {
+      if (isSumRow(i)) { var sb = subs[i.id]; rows.push(['SUM', i.desc, '', '', '', sb.amt.toFixed(2), '', sb.earned.toFixed(2), '']); return; }
       if (isHeading(i)) { rows.push([i.no, i.desc, '', '', '', '', '', '', '']); return; }
       rows.push([i.no, i.desc, i.unit, String(i.qty), String(round6(i.rate)), itemAmount(i).toFixed(2), String(i.done),
         itemEarned(i).toFixed(2), i.qty > 0 ? String(round2(i.done / i.qty * 100)) : '']);
@@ -924,7 +939,9 @@
     function number(v) { return parseFloat(String(v).replace(/,/g, '')) || 0; }
     var items = [], skipped = 0;
     rows.forEach(function (r) {
+      var isSum = String(cell(r, 'no')).trim().toUpperCase() === 'SUM';
       var it = sanitizeBoqItem({
+        kind: isSum ? 'sum' : undefined,
         no: unquoteFormula(cell(r, 'no')), desc: unquoteFormula(cell(r, 'desc')), unit: unquoteFormula(cell(r, 'unit')),
         qty: number(cell(r, 'qty')), rate: number(cell(r, 'rate')), done: number(cell(r, 'done'))
       });
@@ -949,7 +966,7 @@
     billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
-    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, isHeading: isHeading,
+    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds

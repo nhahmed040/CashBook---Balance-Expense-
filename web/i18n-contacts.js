@@ -20,7 +20,15 @@
       export_report: 'Export report', export_excel: 'Excel', export_pdf: 'PDF / print', report_title: 'Cash report', this_book: 'This book', all_books_opt: 'All books',
       export_boq_xlsx: 'Export Summary BOQ (Excel)', export_cert_xlsx: 'Certificate (Excel)', xlsx_saved: 'Excel file ready', period: 'Period',
       contractor_name: 'Contractor', variation_total: 'Variation orders total', rebate_pct: 'Rebate %',
-      by_category: 'Category', by_mode: 'Payment mode', by_member: 'Member', by_contact: 'Contact', by_book: 'Book'
+      by_category: 'Category', by_mode: 'Payment mode', by_member: 'Member', by_contact: 'Contact', by_book: 'Book',
+      cf_delete_row: 'Delete “{name}”? This cannot be undone.', cf_pay_bill: 'Record payment of {amount} to {name}? This cannot be undone.',
+      cf_receive: 'Record {amount} received for {name}? This cannot be undone.', cf_wages: 'Mark wages of {total} for {from} – {to} as paid? This cannot be undone.',
+      cf_remove_pin: 'Remove the PIN lock? Anyone who opens the app will see your data.', cf_revoke: 'Revoke all invite codes for “{name}”? People who have not joined yet will need a new code.',
+      cf_remove_member: 'Remove {name} from “{book}”? They lose access to this book.', cf_signout: 'Sign out of online sync on this phone?',
+      add_sum_row: 'Add summary row', sum_row: 'Summary row', sum_label: 'Label', sum_default: 'Total carried to summary',
+      sum_note: 'Adds up all items above it, back to the previous summary row. It is not counted again in the BoQ total.',
+      row_menu: 'Row options', insert_above: 'Insert item above', insert_below: 'Insert item below', sum_above: 'Insert summary row above', sum_below: 'Insert summary row below',
+      move_up: 'Move up', move_down: 'Move down'
     },
     om: {
       contacts: 'Quunnamtoota', contact: 'Quunnamtaa', add_contact: 'Quunnamtaa dabali', no_contacts: 'Ammaaf quunnamtaan hin jiru.',

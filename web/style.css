@@ -499,3 +499,9 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .booktitle .btext { display: flex; flex-direction: column; min-width: 0; }
 .booktitle .btext b { font-size: 1.15rem; overflow-wrap: anywhere; } .booktitle .btext small { opacity: .65; }
 .sheetov .modal button { margin-top: 8px; }
+
+/* BoQ row menu + summary rows */
+.boqrow.heading { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+.boqrow.sumrow { border-top: 2px solid var(--border); }
+.boqrow.sumrow .boqtop { flex: 1; }
+.boqmenu { flex: none; min-width: 40px; padding: 4px 10px; font-size: 20px; line-height: 1; background: transparent; border: 0; cursor: pointer; color: inherit; }
