@@ -77,6 +77,7 @@
       h += row('+ ' + t('variation_orders'), m(k.variation));
     }
     h += row(t('gross'), m(k.gross));
+    if (k.variationOrder > 0) h += row('   ' + t('of_which') + ' ' + t('variation_order_n', { n: d.varNo }), m(k.variationOrder));
     h += row(t('cum_certified'), m(d.seq.cumulative), 'head');
     h += row('+ ' + t('vat_amt') + ' (' + p.vat + '%)', m(k.vat));
     h += row(t('work_incl_vat'), m(k.gross + k.vat), 'head');
@@ -86,14 +87,19 @@
     h += row(t('payable'), m(k.payable), 'total');
     h += '</table>';
     h += '<p class="note">' + esc(t('cert_formula')) + '</p>';
-    if (c.variations && c.variations.length) {
-      h += '<h2>' + esc(t('variation_orders')) + '</h2><table><thead><tr><th>' + esc(t('item_desc')) + '</th><th>' + esc(t('unit')) + '</th><th class="n">' + esc(t('qty')) +
-        '</th><th class="n">' + esc(t('rate')) + '</th><th class="n">' + esc(t('amount')) + '</th></tr></thead><tbody>';
-      c.variations.forEach(function (v) {
-        h += '<tr><td>' + esc(v.desc) + '</td><td>' + esc(v.unit) + '</td><td class="n">' + esc(v.qty) + '</td><td class="n">' + esc(d.rateStr ? d.rateStr(v.rate) : m(v.rate)) +
-          '</td><td class="n">' + esc(m(d.itemAmount(v))) + '</td></tr>';
+    if (k.variationOrder > 0) {
+      var vh = t('variation_order_n', { n: d.varNo });
+      h += '<h2>' + esc(vh) + '</h2><table><thead><tr><th>' + esc(t('item_desc')) + '</th><th>' + esc(t('unit')) + '</th><th class="n">' + esc(t('contract_qty')) +
+        '</th><th class="n">' + esc(t('executed_qty')) + '</th><th class="n">' + esc(t('exceed_qty')) + '</th><th class="n">' + esc(t('rate')) + '</th><th class="n">' + esc(t('amount')) + '</th></tr></thead><tbody>';
+      (d.varRows || []).forEach(function (r) {
+        h += '<tr><td>' + esc(r.item.desc) + '</td><td>' + esc(r.item.unit) + '</td><td class="n">' + esc(r.contractQty) + '</td><td class="n">' + esc(r.executed) +
+          '</td><td class="n">' + esc(r.exceed) + '</td><td class="n">' + esc(d.rateStr ? d.rateStr(r.rate) : m(r.rate)) + '</td><td class="n">' + esc(m(r.amount)) + '</td></tr>';
       });
-      h += '<tr class="total"><td colspan="4">' + esc(t('variation_orders')) + '</td><td class="n">' + esc(m(k.variation)) + '</td></tr></tbody></table>';
+      (c.variations || []).forEach(function (v) {
+        h += '<tr><td>' + esc(v.desc) + '</td><td>' + esc(v.unit) + '</td><td class="n">0</td><td class="n">' + esc(v.qty) + '</td><td class="n">' + esc(v.qty) +
+          '</td><td class="n">' + esc(d.rateStr ? d.rateStr(v.rate) : m(v.rate)) + '</td><td class="n">' + esc(m(d.itemAmount(v))) + '</td></tr>';
+      });
+      h += '<tr class="total"><td colspan="6">' + esc(vh) + '</td><td class="n">' + esc(m(k.variationOrder)) + '</td></tr></tbody></table>';
     }
 
     if (d.boq && d.boq.length) {

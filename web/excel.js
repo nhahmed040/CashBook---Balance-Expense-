@@ -109,30 +109,58 @@
     };
   }
 
-  /* ---------- Variation orders of one certificate ---------- */
-  function variationSheet(p, cert, sheetName) {
-    var rows = [];
+  /* ---------- Variation Order sheet (follows the user's "Variation order format" workbook) ---------- */
+  function variationOrderSheet(p, cert, orderNo, info) {
+    var rows = [], merges = [], heights = {};
     function put(r, c, v) { while (rows.length < r) rows.push(null); if (!rows[r - 1]) rows[r - 1] = []; rows[r - 1][c] = v; }
-    var info = { sz: 12, b: true, font: T };
-    put(2, 1, { v: 'Project :- ' + p.name, s: info });
-    put(3, 1, { v: 'Variation orders – ' + (cert.no || 'certificate'), s: info });
-    var hs = { b: true, sz: 12, font: T, h: 'center', border: 'thin', fill: HEAD_FILL, wrap: true };
-    ['Item', 'Description', 'Unit', 'Qty', 'Rate', 'Amount'].forEach(function (h, i) { put(5, i, { v: h, s: hs }); });
-    var cell = { sz: 12, font: T, border: 'thin' }, r = 6, total = 0;
-    cert.variations.forEach(function (v, i) {
-      var amt = v.qty * v.rate; total += amt;
-      put(r, 0, { v: i + 1, s: st({ h: 'center' }, cell) });
-      put(r, 1, { v: v.desc, s: st({ wrap: true, v: 'top' }, cell) });
-      put(r, 2, { v: v.unit, s: st({ h: 'center' }, cell) });
-      put(r, 3, { v: v.qty, s: st({ fmt: QTY, h: 'right' }, cell) });
-      put(r, 4, { v: v.rate, s: st({ fmt: '#,##0.00###', h: 'right' }, cell) });
-      put(r, 5, { f: 'E' + r + '*D' + r, v: amt, s: st({ fmt: MONEY, h: 'right' }, cell) });
+    function col(i) { return String.fromCharCode(65 + i); }
+    var vr = L.boqVariation(p, cert.id).rows.slice();
+    var lines = vr.map(function (r) { return { desc: r.item.desc, unit: r.item.unit, cq: r.contractQty, rate: r.rate, ex: r.executed, pv: r.prevVaried }; });
+    (cert.variations || []).forEach(function (v) { lines.push({ desc: v.desc, unit: v.unit, cq: 0, rate: v.rate, ex: v.qty, pv: 0 }); });
+    var hasPrev = lines.some(function (l) { return l.pv > 0; }), n = hasPrev ? 1 : 0;
+    var cEx = 6, cPv = 7, cXs = 7 + n, cAm = 8 + n;
+    var base = { font: T, sz: 12 };
+    var info12 = st({ b: true }, base);
+    put(2, 4, { v: 'Variation Order No. ' + orderNo, s: st({ b: true, sz: 14 }, base) });
+    put(3, 1, { v: 'Project :- ' + p.name, s: info12 });
+    put(4, 1, { v: 'Location :- ' + (p.location || ''), s: info12 });
+    put(5, 1, { v: 'Client :- ' + (p.client || ''), s: info12 });
+    put(6, 1, { v: 'Contractor:- ' + ((info && info.contractor) || ''), s: info12 });
+    var hs = st({ b: true, h: 'center', border: 'thin', fill: HEAD_FILL, wrap: true }, base);
+    var heads1 = ['No', 'Work Description', 'Unit', 'Contract', '', '', 'Excuted Work'];
+    for (var i = 0; i <= cAm; i++) { put(8, i, { v: i < 3 ? heads1[i] : (i === 3 ? 'Contract' : (i === 6 ? 'Executed Work' : '')), s: hs }); put(9, i, { s: hs }); }
+    merges.push('A8:A9', 'B8:B9', 'C8:C9', 'D8:F8', 'G8:' + col(cAm) + '8');
+    var sub = ['Qty', 'Unit rate', 'Contract cost', 'Executed Quantity'];
+    if (hasPrev) sub.push('Already in previous variation');
+    sub.push('Exceed Quantity', 'Exceed Variation Amount');
+    sub.forEach(function (h, k) { put(9, 3 + k, { v: h, s: hs }); });
+    var cell = st({ border: 'thin' }, base), r = 10, total = 0;
+    lines.forEach(function (l, k) {
+      var exceed = l.ex - l.cq - l.pv, amt = exceed * l.rate; total += amt;
+      put(r, 0, { v: k + 1, s: st({ h: 'center' }, cell) });
+      put(r, 1, { v: l.desc, s: st({ wrap: true, v: 'top' }, cell) });
+      put(r, 2, { v: l.unit, s: st({ h: 'center' }, cell) });
+      put(r, 3, { v: l.cq, s: st({ fmt: QTY, h: 'right' }, cell) });
+      put(r, 4, { v: l.rate, s: st({ fmt: '#,##0.00####', h: 'right' }, cell) });
+      put(r, 5, { f: 'D' + r + '*E' + r, v: l.cq * l.rate, s: st({ fmt: MONEY, h: 'right' }, cell) });
+      put(r, cEx, { v: l.ex, s: st({ fmt: QTY, h: 'right' }, cell) });
+      if (hasPrev) put(r, cPv, { v: l.pv, s: st({ fmt: QTY, h: 'right' }, cell) });
+      put(r, cXs, { f: 'G' + r + '-D' + r + (hasPrev ? '-H' + r : ''), v: exceed, s: st({ fmt: QTY, h: 'right' }, cell) });
+      put(r, cAm, { f: 'E' + r + '*' + col(cXs) + r, v: amt, s: st({ fmt: MONEY, h: 'right' }, cell) });
       r++;
     });
-    put(r, 0, { s: cell }); put(r, 1, { v: 'Total variation orders', s: st({ b: true, h: 'right' }, cell) });
-    for (var k = 2; k <= 4; k++) put(r, k, { s: cell });
-    put(r, 5, { f: 'SUM(F6:F' + (r - 1) + ')', v: total, s: st({ fmt: MONEY, h: 'right', b: true }, cell) });
-    return { name: sheetName, cols: [8, 56, 8, 12, 14, 17], rows: rows, merges: [], heights: {}, landscape: true };
+    for (var z = 0; z <= cAm; z++) put(r, z, { s: cell });
+    put(r, 1, { v: 'Total', s: st({ b: true }, cell) });
+    put(r, cAm, { f: 'SUM(' + col(cAm) + '10:' + col(cAm) + (r - 1) + ')', v: total, s: st({ fmt: MONEY, h: 'right', b: true }, cell) });
+    var sg = r + 3, bold = st({ b: true }, base);
+    [[0, 'Contractor/Project Manager'], [3, 'Site Supervisor'], [6, 'Approved by Client'], [cAm - 1, 'Approved by Construction office']].forEach(function (b) {
+      put(sg, b[0], { v: b[1], s: bold });
+      put(sg + 1, b[0], { v: 'Name:_______________________', s: base });
+      put(sg + 2, b[0], { v: 'Signature:_____________________', s: base });
+      put(sg + 3, b[0], { v: 'Date:_________________________', s: base });
+    });
+    var cols = [5, 52, 8, 12, 14, 16, 16].concat(hasPrev ? [16] : []).concat([14, 20]);
+    return { name: 'Variation Order', cols: cols, rows: rows, merges: merges, heights: heights, landscape: true };
   }
 
   /* ---------- Summary sheet ---------- */
@@ -300,6 +328,11 @@
 
     // current executed (right)
     var useLink = p.boq.length && Math.abs(sum.totals.to - cumGross) < 0.01;
+    var vNo0 = L.variationOrderNo(p, cert.id), vAmt0 = L.certCalc(p, cert).variationOrder;
+    if (vNo0 > 0) {
+      put(19, G, { v: 'Of which Variation order ' + vNo0, s: box });
+      put(19, H, { v: vAmt0, s: boxN });
+    }
     put(21, G, { v: 'A) Current Executed ', s: head }); put(21, H, { s: head }); merges.push('G21:H21');
     put(22, G, { v: 'Service sum', s: st({ b: true, fill: HEAD_FILL }, box) });
     put(22, H, useLink ? { f: q('Summary') + 'G' + sum.totalRow, v: cumGross, s: st({ fill: HEAD_FILL }, boxNB) } : { v: cumGross, s: st({ fill: HEAD_FILL }, boxNB) });
@@ -339,7 +372,7 @@
   }
 
   /* Certificate + summary + BOQ workbook for one certificate. */
-  function certificateWorkbook(project, certId) {
+  function certificateWorkbook(project, certId, info) {
     var p = prep(project);
     var cert = null;
     p.certs.forEach(function (c) { if (c.id === certId) cert = c; });
@@ -349,7 +382,8 @@
     var sum = summarySheet(p, boq, 'Summary', 'BOQ');
     var certSheet = certificateSheet(p, cert, sum, 'Summary');
     var sheets = [certSheet, sum.sheet, boq.sheet];
-    if (cert.variations && cert.variations.length) sheets.push(variationSheet(p, cert, 'Variation'));
+    var vNo = L.variationOrderNo(p, certId);
+    if (vNo > 0) sheets.push(variationOrderSheet(p, cert, vNo, info));
     return { sheets: sheets };
   }
 

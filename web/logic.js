@@ -126,7 +126,7 @@
     if (!b || typeof b !== 'object') return null;
     var name = str(b.name, 40);
     if (!name) return null;
-    return { id: str(b.id, 40) || ('biz' + newId()), name: name, staff: mapList(b.staff, sanitizeStaff, 200) };
+    return { id: str(b.id, 40) || ('biz' + newId()), name: name, contractor: str(b.contractor, 80), staff: mapList(b.staff, sanitizeStaff, 200) };
   }
 
   /* ---------- project parts ---------- */
@@ -196,7 +196,7 @@
   }
   /* Project variation total: the larger of the figure typed in project details and what the certificates carry. */
   function variationTotal(p) {
-    var certified = round2((p.certs || []).reduce(function (a, c) { return a + certVariation(c); }, 0));
+    var certified = round2((p.certs || []).reduce(function (a, c) { return a + certCalcVariation(p, c); }, 0));
     return Math.max(round2(num(p.variation, 0)), certified);
   }
 
@@ -660,10 +660,12 @@
     var cashDue = round2(payable - wht - vatWht);
     var received = certReceived(cert);
     var variation = certVariation(cert);
+    var taxSettled = round2((cert.whtReceipt ? wht : 0) + (cert.vatWhtReceipt ? vatWht : 0));
     return {
+      variationOrder: certCalcVariation(project, cert), taxSettled: taxSettled,
       gross: cert.gross, variation: variation, work: round2(cert.gross - variation), retention: retention, advanceRecovery: cert.advanceRecovery, penalty: penalty,
       vat: vat, payable: payable, wht: wht, vatWht: vatWht, cashDue: cashDue,
-      received: received, balance: round2(cashDue - received)
+      received: received, balance: round2(payable - taxSettled - received)
     };
   }
 
@@ -720,7 +722,7 @@
       vatTotal: sum(calcs, function (c) { return c.vat; }), whtTotal: sum(calcs, function (c) { return c.wht; }), vatWhtTotal: sum(calcs, function (c) { return c.vatWht; }),
       variationTotal: variationTotal(p),
       taxWithheld: sum(calcs, function (c) { return c.wht + c.vatWht; }),
-      clientOutstanding: round2(sum(calcs, function (c) { return c.cashDue; }) - receivedCerts),
+      clientOutstanding: sum(calcs, function (c) { return c.balance; }),
       costByCode: costByCode, costTotal: costTotal,
       budgetTotal: budgetTotal, budgetRemaining: round2(budgetTotal - costTotal),
       billsTotal: billsTotal, billsPaid: billsPaid, billsOutstanding: round2(billsTotal - billsPaid),
@@ -895,6 +897,29 @@
     return sections;
   }
 
+  /* Variation order from exceed quantities: BoQ items whose executed quantity, up to and including this certificate,
+     goes over the contract quantity. Only the excess added since the previous certificate counts for this one. */
+  function boqVariation(project, certId) {
+    var rows = [];
+    boqProgress(project, certId).forEach(function (p) {
+      var it = p.item;
+      if (isHeading(it) || isSumRow(it) || !(it.qty > 0)) return;
+      var exTotal = Math.max(0, p.total - it.qty), exPrev = Math.max(0, p.prev - it.qty);
+      var exceed = round6(exTotal - exPrev);
+      if (exceed > 0) rows.push({ item: it, contractQty: it.qty, rate: it.rate, executed: p.total, prevVaried: round6(exPrev), exceed: exceed, amount: exceed * it.rate });
+    });
+    return { rows: rows, total: rawSum(rows, function (r) { return r.amount; }) };
+  }
+  /* Variation order number: 1, 2, 3 ... counting only the certificates that have one. 0 = none. */
+  function variationOrderNo(project, certId) {
+    var n = 0, found = 0;
+    sortedCerts(project).forEach(function (c) {
+      if (certCalcVariation(project, c) > 0) { n++; if (c.id === certId) found = n; }
+    });
+    return found;
+  }
+  function certCalcVariation(project, cert) { return round2(boqVariation(project, cert.id).total + certVariation(cert)); }
+
   /* Amount in words, e.g. "Four Million five hundred seventy six thousand ... and 48/100 Birr only". */
   function amountWords(n, unit) {
     n = Math.abs(round2(n));
@@ -986,7 +1011,7 @@
     billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
-    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
+    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds

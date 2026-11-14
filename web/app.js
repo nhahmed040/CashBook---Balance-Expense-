@@ -411,11 +411,19 @@
     document.body.appendChild(f);
   }
 
+  /* Contractor name for the Variation Order sheet: set in the business that owns the project's book. */
+  function contractorOf(p) {
+    var bk = state.books.filter(function (b) { return b.projectId === p.id; })[0];
+    var bz = (bk && bk.businessId) ? state.businesses.filter(function (x) { return x.id === bk.businessId; })[0] : null;
+    if (!bz) bz = state.businesses.filter(function (x) { return x.id === state.business; })[0];
+    return bz ? (bz.contractor || '') : '';
+  }
+
   function printCertificate(p, cert) {
     var title = (t('cert_title') + ' ' + (cert.no || '')).trim();
     printDoc(title, window.CBPrint.certificateHtml({
       t: t, money: money, lang: state.settings.lang, project: p, cert: cert,
-      calc: L.certCalc(p, cert), seq: L.certCumulative(p, cert.id), boq: p.boq.length ? p.boq : null, date: L.todayStr(),
+      calc: L.certCalc(p, cert), varRows: L.boqVariation(p, cert.id).rows, varNo: L.variationOrderNo(p, cert.id), seq: L.certCumulative(p, cert.id), boq: p.boq.length ? p.boq : null, date: L.todayStr(),
       fmt: function (d) { return fmtDate(d, true); },
       itemAmount: L.itemAmount, rateStr: L.rateStr, itemEarned: L.itemEarned, isHeading: L.isHeading, isSumRow: L.isSumRow
     }));
@@ -1318,6 +1326,7 @@
         card.appendChild(kv('+ ' + t('variation_orders'), money(c.variation)));
       }
       card.appendChild(kv(t('gross'), money(c.gross)));
+      if (c.variationOrder > 0) card.appendChild(kv('   ' + t('of_which') + ' ' + t('variation_order_n', { n: L.variationOrderNo(p, cert.id) }), money(c.variationOrder)));
       card.appendChild(kv('+ ' + t('vat_amt') + ' (' + pct(p.vat) + ')', money(c.vat)));
       card.appendChild(kv(t('work_incl_vat'), money(L.round2(c.gross + c.vat))));
       card.appendChild(kv('− ' + t('retention_amt') + ' (' + pct(p.retention) + ')', money(c.retention)));
@@ -1331,6 +1340,7 @@
       card.appendChild(kv(t('wht_receipt'), cert.whtReceipt || t('receipt_missing'), cert.whtReceipt || !(c.wht > 0) ? '' : 'neg'));
       card.appendChild(kv(t('vat_wht_receipt'), cert.vatWhtReceipt || t('receipt_missing'), cert.vatWhtReceipt || !(c.vatWht > 0) ? '' : 'neg'));
       card.appendChild(kv(t('cash_received'), money(c.received)));
+      card.appendChild(kv(t('tax_settled'), money(c.taxSettled)));
       card.appendChild(kv(t('balance_due'), money(c.balance), c.balance > 0 ? 'pos' : ''));
       cert.receipts.forEach(function (rc) {
         var r = el('div', 'pay');
@@ -1347,7 +1357,7 @@
       if (c.balance > 0) row.appendChild(btn(t('receive'), 'primary', function () { receiveCert(p, cert); }));
       row.appendChild(btn(t('print'), '', function () { printCertificate(p, cert); }));
       row.appendChild(btn(t('export_cert_xlsx'), '', function () {
-        saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id));
+        saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id, { contractor: contractorOf(p) }));
       }));
       row.appendChild(btn(t('variation_orders') + (cert.variations.length ? ' (' + cert.variations.length + ')' : ''), '', function () { variationList(p, cert); }));
       row.appendChild(btn(t('tax_receipts'), '', function () { editTaxReceipts(cert); }));
@@ -2096,11 +2106,14 @@
   function editBusiness(bz) {
     openForm({
       title: bz ? t('rename_business') : t('add_business'),
-      fields: [{ key: 'name', label: t('business_name'), type: 'text', value: bz ? bz.name : '', required: true, max: 40 }],
+      fields: [
+        { key: 'name', label: t('business_name'), type: 'text', value: bz ? bz.name : '', required: true, max: 40 },
+        { key: 'contractor', label: t('contractor_name'), type: 'text', value: bz ? bz.contractor || '' : '', max: 80 }
+      ],
       onSubmit: function (v) {
-        if (bz) bz.name = v.name.slice(0, 40);
+        if (bz) { bz.name = v.name.slice(0, 40); bz.contractor = (v.contractor || '').slice(0, 80); }
         else {
-          var nb = L.sanitizeBusiness({ id: 'biz' + L.newId(), name: v.name, staff: [] });
+          var nb = L.sanitizeBusiness({ id: 'biz' + L.newId(), name: v.name, contractor: v.contractor, staff: [] });
           state.businesses.push(nb);
           state.business = nb.id;
           var id = 'b' + L.newId();
@@ -2283,7 +2296,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.4.0', APP_BUILD = 18;
+  var APP_VERSION = '2.5.0', APP_BUILD = 19;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

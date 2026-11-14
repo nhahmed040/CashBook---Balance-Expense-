@@ -83,6 +83,13 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Client and contract** shows the amount beside each percentage: advance recovered and still to recover, VAT, retention held, withholding tax, VAT withheld (totals from certificates so far).
 - **About** has the description, version and build, contact details, what's new, a short how-to and a backup button. The database-rules viewer is gone from the app (rules stay in `firebase-rules.json`).
 
+## Variation Order, Due from client (2.5)
+
+- **Variation Order per certificate:** BoQ items whose executed quantity goes over the contract quantity give Variation order 1, 2, 3 … (only the excess added since the previous certificate counts). It is already inside the certificate's gross, so it shows as an “of which” line in the app, the printout and the certificate Excel. The Excel gets a **Variation Order** sheet following the Gamachis format (contract qty and rate, executed qty, exceed qty, amount, live SUM, four signature blocks). Later orders add a column for the quantity already varied.
+- **Extra items (not in BoQ)** (previously “Variation orders”) are still added to the certificate's work and appear in the Variation Order sheet and printout.
+- **Due from client** = net pay − (cash received + withholding and VAT withheld whose tax receipt is entered). Record receipts as the cash that reached you; the tax parts settle when their receipts are entered on the certificate.
+- **Contractor name** is set in the business (Entries → business → edit) and prints on the Variation Order sheet.
+
 ## Build locally
 
 Needs JDK 17, the Android SDK and Gradle 8.7:
