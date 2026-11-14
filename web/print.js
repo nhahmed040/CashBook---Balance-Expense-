@@ -72,6 +72,10 @@
 
     h += '<h2>' + esc(t('valuation')) + '</h2><table>';
     h += row(t('prev_certified'), m(d.seq.previous));
+    if (k.variation > 0) {
+      h += row(t('work_excl_var'), m(k.work));
+      h += row('+ ' + t('variation_orders'), m(k.variation));
+    }
     h += row(t('gross'), m(k.gross));
     h += row(t('cum_certified'), m(d.seq.cumulative), 'head');
     h += row('+ ' + t('vat_amt') + ' (' + p.vat + '%)', m(k.vat));
@@ -82,6 +86,15 @@
     h += row(t('payable'), m(k.payable), 'total');
     h += '</table>';
     h += '<p class="note">' + esc(t('cert_formula')) + '</p>';
+    if (c.variations && c.variations.length) {
+      h += '<h2>' + esc(t('variation_orders')) + '</h2><table><thead><tr><th>' + esc(t('item_desc')) + '</th><th>' + esc(t('unit')) + '</th><th class="n">' + esc(t('qty')) +
+        '</th><th class="n">' + esc(t('rate')) + '</th><th class="n">' + esc(t('amount')) + '</th></tr></thead><tbody>';
+      c.variations.forEach(function (v) {
+        h += '<tr><td>' + esc(v.desc) + '</td><td>' + esc(v.unit) + '</td><td class="n">' + esc(v.qty) + '</td><td class="n">' + esc(d.rateStr ? d.rateStr(v.rate) : m(v.rate)) +
+          '</td><td class="n">' + esc(m(d.itemAmount(v))) + '</td></tr>';
+      });
+      h += '<tr class="total"><td colspan="4">' + esc(t('variation_orders')) + '</td><td class="n">' + esc(m(k.variation)) + '</td></tr></tbody></table>';
+    }
 
     if (d.boq && d.boq.length) {
       h += '<h2 class="pb">' + esc(t('work_done')) + '</h2><table><thead><tr><th>' + esc(t('item_no')) + '</th><th>' + esc(t('item_desc')) +

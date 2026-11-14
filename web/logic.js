@@ -184,6 +184,22 @@
     return { pct: pct, amount: amount };
   }
 
+  function sanitizeVariation(v) {
+    if (!v || typeof v !== 'object') return null;
+    var desc = str(v.desc, 120);
+    if (!desc) return null;
+    return { id: validId(v.id) ? v.id : newId(), desc: desc, unit: str(v.unit, 12), qty: num6(v.qty, 0), rate: num6(v.rate, 0) };
+  }
+  /* Variation orders added to one certificate (they are part of its gross work, before VAT). */
+  function certVariation(cert) {
+    return rawSum(cert.variations || [], function (v) { return v.qty * v.rate; });
+  }
+  /* Project variation total: the larger of the figure typed in project details and what the certificates carry. */
+  function variationTotal(p) {
+    var certified = round2((p.certs || []).reduce(function (a, c) { return a + certVariation(c); }, 0));
+    return Math.max(round2(num(p.variation, 0)), certified);
+  }
+
   function sanitizeCert(c) {
     if (!c || typeof c !== 'object') return null;
     var g = Number(c.gross);
@@ -198,6 +214,7 @@
       whtReceipt: str(c.whtReceipt, 30),
       vatWhtReceipt: str(c.vatWhtReceipt, 30),
       receipts: mapList(c.receipts, sanitizePayment, 500),
+      variations: mapList(c.variations, sanitizeVariation, 200),
       snap: sanitizeSnap(c.snap)
     };
   }
@@ -642,8 +659,9 @@
     var payable = round2(cert.gross - retention - cert.advanceRecovery + vat - penalty);
     var cashDue = round2(payable - wht - vatWht);
     var received = certReceived(cert);
+    var variation = certVariation(cert);
     return {
-      gross: cert.gross, retention: retention, advanceRecovery: cert.advanceRecovery, penalty: penalty,
+      gross: cert.gross, variation: variation, work: round2(cert.gross - variation), retention: retention, advanceRecovery: cert.advanceRecovery, penalty: penalty,
       vat: vat, payable: payable, wht: wht, vatWht: vatWht, cashDue: cashDue,
       received: received, balance: round2(cashDue - received)
     };
@@ -698,7 +716,9 @@
       retentionHeld: sum(calcs, function (c) { return c.retention; }),
       advance: p.advance, advanceRecovered: advanceRecovered, advanceBalance: round2(p.advance - advanceRecovered),
       payableTotal: payableTotal,
-      received: round2(p.advance + receivedCerts + sum(calcs, function (c) { return c.wht + c.vatWht; })),
+      received: round2(p.advance + payableTotal),
+      vatTotal: sum(calcs, function (c) { return c.vat; }), whtTotal: sum(calcs, function (c) { return c.wht; }), vatWhtTotal: sum(calcs, function (c) { return c.vatWht; }),
+      variationTotal: variationTotal(p),
       taxWithheld: sum(calcs, function (c) { return c.wht + c.vatWht; }),
       clientOutstanding: round2(sum(calcs, function (c) { return c.cashDue; }) - receivedCerts),
       costByCode: costByCode, costTotal: costTotal,
@@ -771,7 +791,7 @@
     rows.push([]);
     rows.push(['Contract sum', p.contractSum.toFixed(2)]);
     rows.push(['Certified (gross)', s.certified.toFixed(2)]);
-    rows.push(['Received (incl. advance and tax withheld)', s.received.toFixed(2)]);
+    rows.push(['Received (Net Payments + Advance)', s.received.toFixed(2)]);
     rows.push(['Due from client', s.clientOutstanding.toFixed(2)]);
     rows.push(['Retention held', s.retentionHeld.toFixed(2)]);
     rows.push(['Owed to suppliers and workers', s.owed.toFixed(2)]);
@@ -966,7 +986,7 @@
     billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
-    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
+    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds

@@ -7,7 +7,7 @@
       projects: 'Projects', project: 'Project', no_project: 'No project', new_project: 'New project', edit_project: 'Edit project details',
       no_projects: 'No projects yet. Tap + to add your first project.', back: '‹ Projects',
       overview: 'Overview', budget: 'Budget', bills: 'Bills', client: 'Client', labour: 'Labour', books_sec: 'Cash books',
-      contract_sum: 'Contract sum', certified: 'Certified (gross)', pct_complete: 'Complete', received: 'Received (incl. advance and tax withheld)',
+      contract_sum: 'Contract sum', certified: 'Certified (gross)', pct_complete: 'Complete', received: 'Received (Net Payments + Advance)',
       due_from_client: 'Due from client', retention_held: 'Retention held', advance_balance: 'Advance not yet recovered',
       budget_total: 'Total budget', actual_cost: 'Actual cost', remaining: 'Remaining', over_budget: 'Over budget by {n}',
       owed: 'Owed to suppliers and workers', margin: 'Certified minus cost', export_report: 'Export project report (CSV)',

@@ -277,12 +277,35 @@
     <div class="modal about">
       <div class="aboutlogo">📒</div>
       <h2>CashBook – Balance &amp; Expense</h2>
+      <p class="muted small" data-i18n="about_desc">Cash books, projects, bills of quantities and payment certificates for contractors.</p>
       <dl class="aboutlist">
         <div><dt data-i18n="app_version">Version</dt><dd id="aboutVersion"></dd></div>
         <div><dt data-i18n="created_by">Created by</dt><dd>Nuh Ahmed</dd></div>
         <div><dt data-i18n="email">Email</dt><dd><a href="mailto:nhahmed040@gmail.com">nhahmed040@gmail.com</a></dd></div>
         <div><dt data-i18n="phone">Phone</dt><dd><a href="tel:+251912118081">+251912118081</a></dd></div>
       </dl>
+      <details class="aboutsec" open>
+        <summary data-i18n="about_new_title">What’s new</summary>
+        <ul>
+          <li data-i18n="about_new_1">Variation orders on each certificate, added to its work before VAT</li>
+          <li data-i18n="about_new_2">Amounts beside VAT, retention, withholding and advance repayment</li>
+          <li data-i18n="about_new_3">“Received” = net payments + advance</li>
+          <li data-i18n="about_new_4">BoQ: insert, move rows and summary rows</li>
+          <li data-i18n="about_new_5">Confirmation before anything that cannot be undone</li>
+        </ul>
+      </details>
+      <details class="aboutsec">
+        <summary data-i18n="about_help_title">How to</summary>
+        <ul>
+          <li data-i18n="about_help_1">Certificate: Projects → Client → ➕. Work before VAT + VAT − retention − advance repayment − penalty = net pay. Withholding and VAT withheld come off after it.</li>
+          <li data-i18n="about_help_2">Variation orders: on a certificate tap “Variation orders” and add items. They are added to that certificate’s work.</li>
+          <li data-i18n="about_help_3">BoQ: the ⋯ on a row inserts items or summary rows above or below, and moves rows. A summary row adds up the rows above it back to the previous one.</li>
+          <li data-i18n="about_help_4">Share a book: Entries → ⋮ on a book → Share with people. Sign in under Settings → Online sync first.</li>
+          <li data-i18n="about_help_5">Excel and PDF: certificate and Summary BOQ buttons are in Projects; the report export is in Reports.</li>
+        </ul>
+      </details>
+      <p class="muted small" data-i18n="about_privacy">Your data stays on this phone. It goes online only if you sign in to Online sync.</p>
+      <button type="button" id="aboutBackup" class="block" data-i18n="backup">Backup all data</button>
       <button type="button" id="closeAbout" class="primary block" data-i18n="close">Close</button>
     </div>
   </div>

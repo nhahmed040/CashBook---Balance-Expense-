@@ -505,3 +505,8 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .boqrow.sumrow { border-top: 2px solid var(--border); }
 .boqrow.sumrow .boqtop { flex: 1; }
 .boqmenu { flex: none; min-width: 40px; padding: 4px 10px; font-size: 20px; line-height: 1; background: transparent; border: 0; cursor: pointer; color: inherit; }
+
+.modal.about { max-height: 88vh; overflow-y: auto; }
+.aboutsec { width: 100%; text-align: left; background: var(--bg); border-radius: 12px; padding: 8px 12px; margin: 4px 0; }
+.aboutsec summary { font-weight: 700; cursor: pointer; }
+.aboutsec ul { margin: 8px 0 2px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: .92rem; }

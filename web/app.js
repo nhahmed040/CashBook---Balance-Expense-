@@ -1294,11 +1294,14 @@
     info.appendChild(kv(t('contract_sum'), money(p.contractSum)));
     if (p.vat > 0 && p.contractSum > 0) info.appendChild(kv(t('contract_incl_vat'), money(L.contractWithVat(p))));
     info.appendChild(kv(t('advance_paid') + ' (' + pct(p.advancePct) + ')', money(p.advance)));
-    info.appendChild(kv(t('recovery_pct'), pct(p.recoveryPct)));
-    info.appendChild(kv(t('vat_pct'), pct(p.vat)));
-    info.appendChild(kv(t('retention_pct'), pct(p.retention)));
-    info.appendChild(kv(t('wht_pct'), pct(p.wht)));
-    info.appendChild(kv(t('vat_wht_pct'), pct(p.vatWhtPct)));
+    info.appendChild(kv(t('cl_adv_repay', { p: pct(p.recoveryPct) }), money(s.advanceRecovered)));
+    info.appendChild(kv(t('cl_adv_balance'), money(s.advanceBalance)));
+    info.appendChild(kv(t('cl_vat', { p: pct(p.vat) }), money(s.vatTotal)));
+    info.appendChild(kv(t('cl_retention', { p: pct(p.retention) }), money(s.retentionHeld)));
+    info.appendChild(kv(t('cl_wht', { p: pct(p.wht) }), money(s.whtTotal)));
+    info.appendChild(kv(t('cl_vat_wht', { p: pct(p.vatWhtPct) }), money(s.vatWhtTotal)));
+    if (s.variationTotal > 0) info.appendChild(kv(t('variation_total_all'), money(s.variationTotal)));
+    info.appendChild(el('p', 'note', t('cl_amounts_note')));
     info.appendChild(kv(t('due_from_client'), money(s.clientOutstanding), s.clientOutstanding > 0 ? 'pos' : '', 'total'));
     info.appendChild(el('p', 'note', t('cert_formula')));
     info.appendChild(btn(t('edit_project'), 'block', function () { editProject(p); }));
@@ -1310,6 +1313,10 @@
       var card = panel(null);
       card.appendChild(el('h3', null, cert.no || t('client')));
       card.appendChild(el('div', 'muted small', fmtDate(cert.date)));
+      if (c.variation > 0) {
+        card.appendChild(kv(t('work_excl_var'), money(c.work)));
+        card.appendChild(kv('+ ' + t('variation_orders'), money(c.variation)));
+      }
       card.appendChild(kv(t('gross'), money(c.gross)));
       card.appendChild(kv('+ ' + t('vat_amt') + ' (' + pct(p.vat) + ')', money(c.vat)));
       card.appendChild(kv(t('work_incl_vat'), money(L.round2(c.gross + c.vat))));
@@ -1342,6 +1349,7 @@
       row.appendChild(btn(t('export_cert_xlsx'), '', function () {
         saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id));
       }));
+      row.appendChild(btn(t('variation_orders') + (cert.variations.length ? ' (' + cert.variations.length + ')' : ''), '', function () { variationList(p, cert); }));
       row.appendChild(btn(t('tax_receipts'), '', function () { editTaxReceipts(cert); }));
       row.appendChild(btn(t('edit_cert'), '', function () { editCert(p, cert); }));
       card.appendChild(row);
@@ -1358,14 +1366,15 @@
       fields: [
         { key: 'no', label: t('cert_no'), type: 'text', value: c.no, max: 20 },
         { key: 'date', label: t('date'), type: 'date', value: c.date, required: true },
-        { key: 'gross', label: t('gross'), type: 'number', min: 0.01, value: c.gross, required: true },
+        { key: 'gross', label: cert && L.certVariation(cert) > 0 ? t('work_excl_var') : t('gross'), type: 'number', min: 0.01, value: cert ? L.round2(c.gross - L.certVariation(cert)) : c.gross, required: true },
         { key: 'advMode', label: t('advance_recovery'), type: 'select', options: advModes, value: isNew ? 'auto' : 'manual' },
         { key: 'advanceRecovery', label: t('adv_manual_amount'), type: 'number', min: 0, value: c.advanceRecovery || '' },
         { key: 'penalty', label: t('penalty'), type: 'number', min: 0, value: c.penalty || '' }
       ],
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
-        var gross = L.round2(v.gross);
+        var varTotal = cert ? L.certVariation(cert) : 0;
+        var gross = L.round2(v.gross + varTotal);
         // automatic = the project's repayment % of the work including VAT, never more than the advance still unrecovered
         var adv = v.advMode === 'auto' ? L.suggestAdvanceRecovery(p, gross, cert ? cert.id : 0) : Math.max(0, L.round2(v.advanceRecovery));
         var pen = Math.max(0, L.round2(v.penalty));
@@ -1385,6 +1394,52 @@
         clearEntryLinks('certId', cert.id);
         p.certs = p.certs.filter(function (x) { return x.id !== cert.id; });
         save(); renderAll();
+        return true;
+      }
+    });
+  }
+
+  /* Variation items of one certificate. They are added to the certificate's work before VAT. */
+  function changeVariations(p, cert, fn) {
+    var oldGross = cert.gross, base = L.round2(oldGross - L.certVariation(cert));
+    var wasAuto = Math.abs(cert.advanceRecovery - L.suggestAdvanceRecovery(p, oldGross, cert.id)) < 0.01;
+    fn();
+    cert.gross = L.round2(base + L.certVariation(cert));
+    if (wasAuto) cert.advanceRecovery = L.suggestAdvanceRecovery(p, cert.gross, cert.id);
+    save(); renderAll();
+  }
+  function variationList(p, cert) {
+    var items = cert.variations.map(function (v) {
+      return { label: v.desc + ' · ' + money(L.itemAmount(v)), run: function () { editVariation(p, cert, v); } };
+    });
+    items.push({ label: '➕ ' + t('add_variation'), run: function () { editVariation(p, cert, null); } });
+    actionSheet(t('variation_orders') + ' – ' + (cert.no || '') + (cert.variations.length ? ' (' + money(L.certVariation(cert)) + ')' : ''), items);
+  }
+  function editVariation(p, cert, v) {
+    var isNew = !v;
+    var x = v || { desc: '', unit: '', qty: '', rate: '' };
+    openForm({
+      title: isNew ? t('add_variation') : t('edit_variation'),
+      fields: [
+        { key: 'desc', label: t('item_desc'), type: 'text', value: x.desc, max: 120, required: true },
+        { key: 'unit', label: t('unit'), type: 'text', value: x.unit, max: 12 },
+        { key: 'qty', label: t('qty'), type: 'number', min: 0, value: x.qty || '' },
+        { key: 'rate', label: t('rate'), type: 'number', min: 0, value: x.rate || '' },
+        { type: 'note', text: t('variation_note') }
+      ],
+      onSubmit: function (f) {
+        var nv = L.sanitizeVariation({ id: v ? v.id : 0, desc: f.desc, unit: f.unit, qty: f.qty, rate: f.rate });
+        if (!nv) return t('required');
+        changeVariations(p, cert, function () {
+          if (isNew) cert.variations.push(nv);
+          else { v.desc = nv.desc; v.unit = nv.unit; v.qty = nv.qty; v.rate = nv.rate; }
+        });
+        setTimeout(function () { variationList(p, cert); }, 0);
+        return null;
+      },
+      onDelete: isNew ? null : function () {
+        if (!window.confirm(t('cf_delete_row', { name: v.desc }))) return false;
+        changeVariations(p, cert, function () { cert.variations = cert.variations.filter(function (a) { return a.id !== v.id; }); });
         return true;
       }
     });
@@ -2228,8 +2283,9 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.3.0';
-  $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION; openModal('aboutModal'); });
+  var APP_VERSION = '2.4.0', APP_BUILD = 18;
+  $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
+  $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
   $('aboutModal').addEventListener('click', function (e) { if (e.target === this) closeModal('aboutModal'); });
   $('bookModal').addEventListener('click', function (ev) { if (ev.target === this) closeModal('bookModal'); });
@@ -2482,7 +2538,7 @@
     });
     var info = {};            // online book id -> { meta, members } from the last sync
     var invite = '';          // last invite text shown
-    var busy = false, again = false, timer = 0, rulesShown = false, advanced = false;
+    var busy = false, again = false, timer = 0, advanced = false;
     var inviteRole = 'view', status = '', authMode = 'signin', profileOpen = false;
     var draft = { name: '', phone: '', company: '', role: '' };
 
@@ -2863,11 +2919,6 @@
         P.appendChild(btn(t('sign_out'), 'block', function () { if (!window.confirm(t('cf_signout'))) return; cloud.signOut(); invite = ''; status = ''; renderAll(); }));
       }
 
-      P.appendChild(btn(t('show_rules'), 'block', function () { rulesShown = !rulesShown; renderCloud(); }));
-      if (rulesShown) {
-        var ta = document.createElement('textarea'); ta.readOnly = true; ta.value = JSON.stringify(CS.RULES, null, 2);
-        P.appendChild(ta);
-      }
     }
     /* result of the Android Google account chooser */
     window.__onGoogle = function (token, err) {

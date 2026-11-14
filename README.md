@@ -76,6 +76,13 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - “Received (incl. advance and tax withheld)” = advance + cash received on certificates + withholding tax + VAT withheld.
 - Actions that cannot be undone now ask first and name what is affected: mark wages paid, receive payment, pay a bill, delete a BoQ row, remove a member from a shared book, revoke invite codes, sign out, remove the PIN.
 
+## Variation orders, amounts and About (2.4)
+
+- **Variation orders per certificate:** on a certificate tap “Variation orders” and add items (description, unit, quantity, rate). Their total is added to that certificate's work before VAT, then flows through VAT, retention, advance repayment and net pay. An automatic advance repayment follows the new work. They show on the printout and in the certificate Excel (extra “Variation” sheet and the Contract Value block).
+- **Received (Net Payments + Advance)** = advance + the net payable of every certificate (before withholding and VAT withheld).
+- **Client and contract** shows the amount beside each percentage: advance recovered and still to recover, VAT, retention held, withholding tax, VAT withheld (totals from certificates so far).
+- **About** has the description, version and build, contact details, what's new, a short how-to and a backup button. The database-rules viewer is gone from the app (rules stay in `firebase-rules.json`).
+
 ## Build locally
 
 Needs JDK 17, the Android SDK and Gradle 8.7:
