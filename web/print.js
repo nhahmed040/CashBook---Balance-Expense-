@@ -27,6 +27,12 @@
     'td.n, th.n { text-align: right; white-space: nowrap; }',
     'tr.total td { font-weight: bold; border-top: 2px solid #111; border-bottom: 2px solid #111; }',
     'tr.head td { font-weight: bold; background: #f7f7f7; }',
+    'tr.grp td, tr.lin td, tr.sumr td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }',
+    'tr.grp td { font-weight: bold; text-align: center; text-transform: uppercase; background: #4b3bb5; color: #fff; }',
+    'tr.lin td { font-weight: bold; background: #e4deff; }',
+    'tr.sumr td { font-weight: bold; background: #f2f2f2; border-top: 1px solid #111; }',
+    'tr.sumr td.r { text-align: right; }',
+    'tr.note td { font-style: italic; color: #555; }',
     '.meta td { border: 0; padding: 1pt 5pt 1pt 0; }',
     '.meta td:first-child { color: #444; width: 32%; }',
     '.sign { display: flex; gap: 24pt; margin-top: 36pt; }',
@@ -108,14 +114,31 @@
         '</th><th>' + esc(t('unit')) + '</th><th class="n">' + esc(t('qty')) + '</th><th class="n">' + esc(t('rate')) +
         '</th><th class="n">' + esc(t('done_to_date')) + '</th><th class="n">' + esc(t('amount')) + '</th></tr></thead><tbody>';
       var total = 0, earned = 0, runA = 0, runE = 0;
-      d.boq.forEach(function (i) {
-        if (d.isSumRow && d.isSumRow(i)) {
-          h += '<tr class="head"><td></td><td colspan="5">' + esc(i.desc) + ': ' + esc(m(runA)) + '</td><td class="n">' + esc(m(runE)) + '</td></tr>';
+      var kind = function (i) { return i.kind || ''; };
+      // value of each Summary line = the next total below it
+      var linkA = {}, linkE = {}, openIdx = -1, ra = 0, re = 0;
+      d.boq.forEach(function (i, k) {
+        if (kind(i) === 'line') { openIdx = k; linkA[k] = 0; linkE[k] = 0; }
+        else if (kind(i) === 'group') openIdx = -1;
+        else if (kind(i) === 'sum') { if (openIdx >= 0) { linkA[openIdx] = ra; linkE[openIdx] = re; } ra = 0; re = 0; openIdx = -1; }
+        else if (!d.isHeading(i)) { ra += i.qty * i.rate; re += i.done * i.rate; }
+      });
+      d.boq.forEach(function (i, k) {
+        if (kind(i) === 'group') {
+          h += '<tr class="grp"><td colspan="7">' + esc(i.desc) + '</td></tr>';
+          return;
+        }
+        if (kind(i) === 'line') {
+          h += '<tr class="lin"><td></td><td colspan="5">' + esc(i.desc) + ' — ' + esc(m(linkA[k] || 0)) + '</td><td class="n">' + esc(m(linkE[k] || 0)) + '</td></tr>';
+          return;
+        }
+        if (kind(i) === 'sum') {
+          h += '<tr class="sumr"><td></td><td colspan="5" class="r">' + esc(i.desc) + ': ' + esc(m(runA)) + '</td><td class="n">' + esc(m(runE)) + '</td></tr>';
           runA = 0; runE = 0;
           return;
         }
         if (d.isHeading(i)) {
-          h += '<tr class="head"><td>' + esc(i.no) + '</td><td colspan="6">' + esc(i.desc) + '</td></tr>';
+          h += '<tr class="note"><td>' + esc(i.no) + '</td><td colspan="6">' + esc(i.desc) + '</td></tr>';
           return;
         }
         total += i.qty * i.rate;

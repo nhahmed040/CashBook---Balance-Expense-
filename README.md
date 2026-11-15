@@ -96,6 +96,13 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Five BoQ row types (2.7)
+
+- **Item** (priced), **Plain row** (note, never in the Summary sheet), **Summary line** (a title such as “1. Excavation and Earth Work”; its value is the next total below it), **Total carried to summary** (adds up the items above it back to the previous total, as before) and **Group title** (A, B … in the Summary sheet).
+- Add or change any row with the **Row type** drop-down (Add item / Add row (any type), or edit a row). The form shows only the fields the type needs. The ⋯ menu inserts above or below and moves rows.
+- Each type has its own style in the app, the printout and the Excel BoQ (group: dark bar; summary line: tinted with accent; total: ruled and right-aligned; plain: italic grey).
+- Projects from 2.6 are converted once: each section title becomes a Summary line at the start of its section and the total goes back to “Total carried to summary”. A Summary line with no total below it shows 0.00. CSV markers: `LINE`, `SUM`, `GROUP`.
+
 ## Build locally
 
 Needs JDK 17, the Android SDK and Gradle 8.7:

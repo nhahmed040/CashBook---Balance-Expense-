@@ -444,9 +444,9 @@
     $('formSubmit').textContent = opts.submitLabel || t('save');
     var body = $('formBody');
     body.textContent = '';
-    var inputs = {};
+    var inputs = {}, toggles = [];
     (opts.fields || []).forEach(function (f) {
-      if (f.type === 'note') { body.appendChild(el('p', 'note', f.text)); return; }
+      if (f.type === 'note') { var np = el('p', 'note', f.text); body.appendChild(np); if (f.showFor) toggles.push({ node: np, f: f }); return; }
       if (f.type === 'photos') {
         var holder = el('div');
         photoWidget(holder, f.state, null, true);
@@ -475,11 +475,20 @@
         if (f.ph) input.placeholder = f.ph;
         input.value = f.value != null ? f.value : '';
       }
-      inputs[f.key] = { input: input, field: f };
+      inputs[f.key] = { input: input, field: f, label: label };
+      if (f.showFor) toggles.push({ node: label, f: f });
       label.appendChild(input);
       if (f.type === 'date') makeDate(input, !f.required);
       body.appendChild(label);
     });
+    function applyShow() {
+      toggles.forEach(function (x) {
+        var src = inputs[x.f.showFor.key];
+        x.node.hidden = !src || x.f.showFor.values.indexOf(src.input.value) < 0;
+      });
+    }
+    Object.keys(inputs).forEach(function (k) { if (inputs[k].field.type === 'select') inputs[k].input.addEventListener('change', applyShow); });
+    applyShow();
     $('formDelete').hidden = !opts.onDelete;
     $('formForm').onsubmit = function (ev) {
       ev.preventDefault();
@@ -490,11 +499,11 @@
         if (f.type === 'number') {
           var n = parseFloat(v);
           if (!isFinite(n)) n = NaN;
-          if (f.required && !(n > 0)) missing = true;
+          if (f.required && !(n > 0) && !inputs[k].label.hidden) missing = true;
           values[k] = isFinite(n) ? n : 0;
         } else {
           v = v.trim();
-          if (f.required && !v) missing = true;
+          if (f.required && !v && !inputs[k].label.hidden) missing = true;
           values[k] = v;
         }
       });
@@ -894,9 +903,8 @@
       editCert(p, null, { gross: proposed });
     }));
     var row = el('div', 'btnrow');
-    row.appendChild(btn(t('add_item'), '', function () { editBoqItem(p, null); }));
-    row.appendChild(btn(t('add_sum_row'), '', function () { editSumRow(p, null, p.boq.length); }));
-    row.appendChild(btn(t('add_group'), '', function () { editGroupRow(p, null, p.boq.length); }));
+    row.appendChild(btn(t('add_item'), '', function () { editRow(p, null, null, 'item'); }));
+    row.appendChild(btn(t('add_row_type'), '', function () { editRow(p, null, null, 'line'); }));
     if (p.boq.length && !p.boq.some(L.isSumRow)) row.appendChild(btn(t('make_lines'), '', function () {
       if (!window.confirm(t('make_lines_ask'))) return;
       p.boq = L.migrateBoq(p.boq); save(); renderAll();
@@ -914,7 +922,7 @@
 
     if (!p.boq.length) { body.appendChild(el('p', 'empty', t('no_items'))); return; }
     var list = panel(null);
-    var subs = L.boqSubtotals(p);
+    var subs = L.boqSubtotals(p), lineTotals = L.boqLineTotals(p);
     p.boq.forEach(function (it, pos) {
       var label = (it.no ? it.no + '  ' : '') + it.desc;
       function menuBtn() {
@@ -922,42 +930,35 @@
         mb.setAttribute('aria-label', t('row_menu'));
         return mb;
       }
-      if (L.isGroupRow(it)) {
-        var gr = el('div', 'boqrow heading grouprow', it.desc);
-        gr.style.cursor = 'pointer';
-        gr.addEventListener('click', function () { editGroupRow(p, it); });
-        gr.appendChild(menuBtn());
-        list.appendChild(gr);
+      function typed(cls, tag, title, detail, amount) {
+        var rw = el('div', 'boqrow typed ' + cls);
+        var tp = el('div', 'boqtop');
+        var mt = el('div', 'meta');
+        mt.appendChild(el('span', 'boqtag', tag));
+        mt.appendChild(el('div', 'title', title));
+        if (detail) mt.appendChild(el('div', 'detail', detail));
+        tp.appendChild(mt);
+        if (amount != null) tp.appendChild(el('div', 'boqamt', amount));
+        tp.addEventListener('click', function () { editRow(p, it); });
+        rw.appendChild(tp);
+        rw.appendChild(menuBtn());
+        list.appendChild(rw);
+      }
+      if (L.isGroupRow(it)) { typed('grouprow', t('rt_group'), it.desc); return; }
+      if (L.isLineRow(it)) {
+        var lt = lineTotals[it.id];
+        typed('linerow', t('rt_line'), it.desc, lt ? (lt.earned > 0 ? t('work_value') + ': ' + money(lt.earned) : '') : t('line_no_total'), lt ? money(lt.amt) : money(0));
         return;
       }
-      if (L.isSumRow(it)) {
-        var sr = el('div', 'boqrow heading sumrow');
-        var st = el('div', 'boqtop');
-        var sm2 = el('div', 'meta');
-        sm2.appendChild(el('div', 'title', it.desc));
-        sm2.appendChild(el('div', 'detail', money(subs[it.id].amt) + (subs[it.id].earned > 0 ? ' · ' + t('work_value') + ': ' + money(subs[it.id].earned) : '')));
-        st.appendChild(sm2);
-        st.addEventListener('click', function () { editSumRow(p, it); });
-        sr.appendChild(st);
-        sr.appendChild(menuBtn());
-        list.appendChild(sr);
-        return;
-      }
-      if (L.isHeading(it)) {
-        var h = el('div', 'boqrow heading', label);
-        h.style.cursor = 'pointer';
-        h.addEventListener('click', function () { editBoqItem(p, it); });
-        h.appendChild(menuBtn());
-        list.appendChild(h);
-        return;
-      }
+      if (L.isSumRow(it)) { typed('sumrow', t('rt_sum_tag'), it.desc, subs[it.id].earned > 0 ? t('work_value') + ': ' + money(subs[it.id].earned) : '', money(subs[it.id].amt)); return; }
+      if (L.isHeading(it)) { typed('noterow', t('rt_note'), label); return; }
       var r = el('div', 'boqrow');
       var top = el('div', 'boqtop');
       var meta = el('div', 'meta');
       meta.appendChild(el('div', 'title', label));
       meta.appendChild(el('div', 'detail', it.qty + ' ' + it.unit + ' × ' + L.rateStr(it.rate) + ' = ' + money(L.itemAmount(it))));
       top.appendChild(meta);
-      top.addEventListener('click', function () { editBoqItem(p, it); });
+      top.addEventListener('click', function () { editRow(p, it); });
       top.appendChild(menuBtn());
       r.appendChild(top);
 
@@ -985,15 +986,11 @@
 
   /* Row menu: insert anywhere, move, edit, delete (like a spreadsheet). */
   function boqRowMenu(p, it, pos) {
-    var title = (L.isSumRow(it) || L.isGroupRow(it)) ? it.desc : ((it.no ? it.no + ' ' : '') + it.desc);
+    var title = (L.isSumRow(it) || L.isGroupRow(it) || L.isLineRow(it)) ? it.desc : ((it.no ? it.no + ' ' : '') + it.desc);
     var items = [
-      { label: t('edit_item'), run: function () { if (L.isSumRow(it)) editSumRow(p, it); else if (L.isGroupRow(it)) editGroupRow(p, it); else editBoqItem(p, it); } },
-      { label: t('insert_above'), run: function () { editBoqItem(p, null, pos); } },
-      { label: t('insert_below'), run: function () { editBoqItem(p, null, pos + 1); } },
-      { label: t('sum_above'), run: function () { editSumRow(p, null, pos); } },
-      { label: t('sum_below'), run: function () { editSumRow(p, null, pos + 1); } },
-      { label: t('group_above'), run: function () { editGroupRow(p, null, pos); } },
-      { label: t('group_below'), run: function () { editGroupRow(p, null, pos + 1); } }
+      { label: t('edit_item'), run: function () { editRow(p, it); } },
+      { label: t('insert_above'), run: function () { editRow(p, null, pos, 'item'); } },
+      { label: t('insert_below'), run: function () { editRow(p, null, pos + 1, 'item'); } }
     ];
     if (pos > 0) items.push({ label: t('move_up'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos - 1, 0, it); save(); renderAll(); } });
     if (pos < p.boq.length - 1) items.push({ label: t('move_down'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos + 1, 0, it); save(); renderAll(); } });
@@ -1005,83 +1002,53 @@
     actionSheet(title, items);
   }
 
-  /* Group title: starts a group (A, B, ...) in the Summary sheet. */
-  function editGroupRow(p, it, pos) {
-    var isNew = !it;
-    openForm({
-      title: t('group_row'),
-      fields: [
-        { key: 'desc', label: t('sum_label'), type: 'text', value: it ? it.desc : '', max: 120, required: true },
-        { type: 'note', text: t('group_note') }
-      ],
-      onSubmit: function (v) {
-        if (isNew) {
-          if (p.boq.length >= 3000) return t('required');
-          var ni = L.sanitizeBoqItem({ kind: 'group', desc: v.desc });
-          if (!ni) return t('required');
-          p.boq.splice(pos == null ? p.boq.length : Math.max(0, Math.min(pos, p.boq.length)), 0, ni);
-        } else it.desc = v.desc.slice(0, 120);
-        save(); renderAll();
-        return null;
-      },
-      onDelete: isNew ? null : function () {
-        if (!window.confirm(t('cf_delete_row', { name: it.desc }))) return false;
-        p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
-        save(); renderAll();
-        return true;
-      }
-    });
+  /* One form for every BoQ row type, chosen from a drop-down. */
+  function rowKind(it) {
+    if (!it) return 'item';
+    if (L.isGroupRow(it)) return 'group';
+    if (L.isLineRow(it)) return 'line';
+    if (L.isSumRow(it)) return 'sum';
+    return L.isHeading(it) ? 'note' : 'item';
   }
-
-  /* Summary line: adds up the items above it, back to the previous summary row. */
-  function editSumRow(p, it, pos) {
-    var isNew = !it;
-    openForm({
-      title: t('sum_row'),
-      fields: [
-        { key: 'desc', label: t('sum_label'), type: 'text', value: it ? it.desc : t('sum_default'), max: 120, required: true },
-        { type: 'note', text: t('sum_note') }
-      ],
-      onSubmit: function (v) {
-        if (isNew) {
-          if (p.boq.length >= 3000) return t('required');
-          var ni = L.sanitizeBoqItem({ kind: 'sum', desc: v.desc });
-          if (!ni) return t('required');
-          p.boq.splice(pos == null ? p.boq.length : Math.max(0, Math.min(pos, p.boq.length)), 0, ni);
-        } else it.desc = v.desc.slice(0, 120);
-        save(); renderAll();
-        return null;
-      },
-      onDelete: isNew ? null : function () {
-        if (!window.confirm(t('cf_delete_row', { name: it.desc }))) return false;
-        p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
-        save(); renderAll();
-        return true;
-      }
-    });
-  }
-
-  function editBoqItem(p, it, pos) {
+  function editRow(p, it, pos, kind0) {
     var isNew = !it;
     var x = it || { no: '', desc: '', unit: '', qty: '', rate: '' };
+    var startKind = isNew ? (kind0 || 'item') : rowKind(it);
+    var SHOW_NO = { key: 'kind', values: ['item', 'note'] }, SHOW_ITEM = { key: 'kind', values: ['item'] };
     openForm({
-      title: isNew ? t('add_item') : t('edit_item'),
+      title: isNew ? t('add_row') : t('edit_item'),
       fields: [
-        { key: 'no', label: t('item_no'), type: 'text', value: x.no, max: 20 },
-        { key: 'desc', label: t('item_desc'), type: 'text', value: x.desc, max: 120, required: true },
-        { key: 'unit', label: t('unit'), type: 'text', value: x.unit, max: 12 },
-        { key: 'qty', label: t('qty'), type: 'number', min: 0, value: x.qty || '' },
-        { key: 'rate', label: t('rate'), type: 'number', min: 0, value: x.rate || '' },
-        { type: 'note', text: t('heading_note') }
+        { key: 'kind', label: t('row_type'), type: 'select', value: startKind, options: [
+          { value: 'item', label: t('rt_item') }, { value: 'note', label: t('rt_note') }, { value: 'line', label: t('rt_line') },
+          { value: 'sum', label: t('rt_sum') }, { value: 'group', label: t('rt_group') }] },
+        { key: 'no', label: t('item_no'), type: 'text', value: x.no, max: 20, showFor: SHOW_NO },
+        { key: 'desc', label: t('item_desc'), type: 'text', value: x.desc, max: 120 },
+        { key: 'unit', label: t('unit'), type: 'text', value: x.unit, max: 12, showFor: SHOW_ITEM },
+        { key: 'qty', label: t('qty'), type: 'number', min: 0, value: x.qty || '', showFor: SHOW_ITEM },
+        { key: 'rate', label: t('rate'), type: 'number', min: 0, value: x.rate || '', showFor: SHOW_ITEM },
+        { type: 'note', text: t('rt_item_note'), showFor: SHOW_ITEM },
+        { type: 'note', text: t('rt_note_note'), showFor: { key: 'kind', values: ['note'] } },
+        { type: 'note', text: t('rt_line_note'), showFor: { key: 'kind', values: ['line'] } },
+        { type: 'note', text: t('rt_sum_note'), showFor: { key: 'kind', values: ['sum'] } },
+        { type: 'note', text: t('rt_group_note'), showFor: { key: 'kind', values: ['group'] } }
       ],
       onSubmit: function (v) {
+        var desc = v.desc;
+        if (v.kind === 'sum' && !desc) desc = L.SUM_DEFAULT;
+        if (!desc) return t('required');
+        var f = { id: it ? it.id : 0, desc: desc, no: '', unit: '', qty: 0, rate: 0, done: it ? it.done : 0 };
+        if (v.kind === 'item' || v.kind === 'note') f.no = v.no;
+        if (v.kind === 'item') { f.unit = v.unit; f.qty = v.qty; f.rate = v.rate; }
+        if (v.kind === 'note') f.done = 0;
+        if (v.kind === 'line' || v.kind === 'sum' || v.kind === 'group') f.kind = v.kind;
+        var ni = L.sanitizeBoqItem(f);
+        if (!ni) return t('required');
         if (isNew) {
-          var ni = L.sanitizeBoqItem({ no: v.no, desc: v.desc, unit: v.unit, qty: v.qty, rate: v.rate });
-          if (!ni) return t('required');
+          if (p.boq.length >= 3000) return t('required');
           if (pos == null) p.boq.push(ni); else p.boq.splice(Math.max(0, Math.min(pos, p.boq.length)), 0, ni);
         } else {
-          it.no = v.no.slice(0, 20); it.desc = v.desc.slice(0, 120); it.unit = v.unit.slice(0, 12);
-          it.qty = Math.max(0, Math.round(v.qty * 1e6) / 1e6); it.rate = Math.max(0, Math.round(v.rate * 1e6) / 1e6);
+          var at = p.boq.indexOf(it);
+          if (at >= 0) p.boq[at] = ni;
         }
         save(); renderAll();
         return null;
@@ -1833,7 +1800,7 @@
     if (ui.view === 'projects') {
       var p = currentProject();
       if (!p) { newProject(); return; }
-      ({ overview: function () { editProject(p); }, boq: function () { editBoqItem(p, null); }, budget: function () { editBudget(p); }, bills: function () { editBill(p, null); },
+      ({ overview: function () { editProject(p); }, boq: function () { editRow(p, null, null, 'item'); }, budget: function () { editBudget(p); }, bills: function () { editBill(p, null); },
          client: function () { editCert(p, null); }, labour: function () { editWorker(p, null); }, books: function () { linkBookForm(p); } })[ui.section]();
       return;
     }
@@ -2328,7 +2295,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.6.0', APP_BUILD = 20;
+  var APP_VERSION = '2.7.0', APP_BUILD = 21;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

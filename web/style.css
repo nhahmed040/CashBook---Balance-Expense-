@@ -511,5 +511,22 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .aboutsec summary { font-weight: 700; cursor: pointer; }
 .aboutsec ul { margin: 8px 0 2px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: .92rem; }
 
-.boqrow.grouprow { background: var(--soft, rgba(124,92,255,.14)); font-size: 1.02rem; text-transform: uppercase; letter-spacing: .02em; border-top: 3px double var(--border); }
-.boqrow.sumrow { background: rgba(124,92,255,.07); }
+
+/* BoQ row types: each has its own look */
+.boqrow.typed { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+.boqrow.typed .boqtop { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.boqtag { display: inline-block; white-space: nowrap; font-size: .66rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-bottom: 3px; }
+.boqamt { font-weight: 800; white-space: nowrap; }
+.boqrow.grouprow { background: linear-gradient(90deg, #4b3bb5, #6a55e0); color: #fff; border-radius: 12px; text-transform: uppercase; letter-spacing: .03em; }
+.boqrow.grouprow .boqtag { background: rgba(255,255,255,.22); color: #fff; }
+.boqrow.grouprow .title { font-size: 1.05rem; font-weight: 800; }
+.boqrow.grouprow .boqmenu { color: #fff; }
+.boqrow.linerow { background: rgba(124,92,255,.13); border-left: 5px solid #7c5cff; border-radius: 10px; }
+.boqrow.linerow .boqtag { background: #7c5cff; color: #fff; }
+.boqrow.linerow .title { font-weight: 800; }
+.boqrow.sumrow { background: transparent; border-top: 2px solid #7c5cff; border-bottom: 2px solid #7c5cff; border-radius: 0; }
+.boqrow.sumrow .boqtag { background: transparent; color: #7c5cff; border: 1px solid #7c5cff; }
+.boqrow.sumrow .title { font-weight: 800; }
+.boqrow.noterow { background: transparent; border: 1px dashed var(--border); border-radius: 10px; font-style: italic; color: var(--muted); }
+.boqrow.noterow .boqtag { background: var(--border); color: var(--muted); font-style: normal; }
+.boqrow.grouprow .boqtop .meta { padding: 4px 0; }

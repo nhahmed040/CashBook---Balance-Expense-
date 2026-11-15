@@ -48,29 +48,48 @@
     var tot = { amt: 0, prev: 0, cur: 0, to: 0 };
     var SC = [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']];
     var segStart = r, seg = { amt: 0, prev: 0, cur: 0, to: 0 };
+    // styles, one per row type
+    var GRP = { fill: '4B3BB5', color: 'FFFFFF', b: true }, LIN = { fill: 'E4DEFF', b: true }, SUMS = { fill: 'F2F2F2', b: true }, NOTE = { i: true, color: '595959' };
+    // pre-pass: value of every total row, so a Summary line can point at the next total below it
+    var sumVals = {}, acc = { amt: 0, prev: 0, cur: 0, to: 0 };
+    p.boq.forEach(function (it, idx) {
+      var pr = progress[idx];
+      if (L.isSumRow(it)) { sumVals[it.id] = { row: 9 + idx, v: acc }; acc = { amt: 0, prev: 0, cur: 0, to: 0 }; }
+      else if (!L.isHeading(it)) { acc.amt += it.qty * it.rate; acc.prev += it.rate * pr.prev; acc.cur += it.rate * pr.cur; acc.to += it.rate * (pr.prev + pr.cur); }
+    });
+    var linked = L.boqLineTotals(p);
 
     p.boq.forEach(function (it, idx) {
       var pr = progress[idx];
       if (L.isGroupRow(it)) {
-        put(r, 0, { s: bold }); put(r, 1, { v: it.desc, s: st({ fill: SEC_FILL, h: 'center' }, bold) });
-        for (var kg = 2; kg <= 11; kg++) put(r, kg, { s: cell });
+        put(r, 0, { s: st(GRP, cell) }); put(r, 1, { v: it.desc.toUpperCase(), s: st(st({ h: 'center' }, GRP), cell) });
+        for (var kg = 2; kg <= 11; kg++) put(r, kg, { s: st(GRP, cell) });
+        merges.push('B' + r + ':L' + r);
         sectionRows.push({ type: 'group', title: it.desc });
         r++; return;
       }
+      if (L.isLineRow(it)) {
+        var lk = linked[it.id], sv = lk ? sumVals[lk.sumId] : null;
+        put(r, 0, { s: st(LIN, cell) }); put(r, 1, { v: it.desc, s: st(LIN, cell) });
+        for (var kl = 2; kl <= 4; kl++) put(r, kl, { s: st(LIN, cell) });
+        SC.forEach(function (c) { put(r, c[1], { f: sv ? c[0] + sv.row : '0', v: sv ? sv.v[c[2]] : 0, s: st(st({ fmt: MONEY, h: 'right' }, LIN), cell) }); });
+        [6, 7, 8].forEach(function (k5) { put(r, k5, { s: st(LIN, cell) }); });
+        sectionRows.push({ type: 'line', title: it.desc, row: sv ? sv.row : 0, sum: sv ? sv.v : { amt: 0, prev: 0, cur: 0, to: 0 } });
+        r++; return;
+      }
       if (L.isSumRow(it)) {
-        var segEnd = r - 1, sty = st({ fmt: MONEY, h: 'right', b: true, fill: SEC_FILL }, cell);
-        put(r, 0, { s: st({ fill: SEC_FILL }, bold) }); put(r, 1, { v: it.desc, s: st({ h: 'right', fill: SEC_FILL }, bold) });
-        for (var kk = 2; kk <= 4; kk++) put(r, kk, { s: st({ fill: SEC_FILL }, cell) });
+        var segEnd = r - 1, sty = st(st({ fmt: MONEY, h: 'right' }, SUMS), cell);
+        put(r, 0, { s: st(SUMS, cell) }); put(r, 1, { v: it.desc, s: st(st({ h: 'right' }, SUMS), cell) });
+        for (var kk = 2; kk <= 4; kk++) put(r, kk, { s: st(SUMS, cell) });
         SC.forEach(function (c) {
           put(r, c[1], { f: segStart <= segEnd ? 'SUM(' + c[0] + segStart + ':' + c[0] + segEnd + ')' : '0', v: seg[c[2]], s: sty });
         });
-        [6, 7, 8].forEach(function (k5) { put(r, k5, { s: st({ fill: SEC_FILL }, cell) }); });
-        sectionRows.push({ type: 'line', row: r, title: it.desc, sum: seg });
+        [6, 7, 8].forEach(function (k6) { put(r, k6, { s: st(SUMS, cell) }); });
         segStart = r + 1; seg = { amt: 0, prev: 0, cur: 0, to: 0 };
         r++; return;
       }
       if (L.isHeading(it)) {
-        put(r, 0, { v: it.no, s: cell }); put(r, 1, { v: it.desc, s: bold });
+        put(r, 0, { v: it.no, s: st(NOTE, cell) }); put(r, 1, { v: it.desc, s: st(NOTE, cell) });
         for (var k2 = 2; k2 <= 11; k2++) put(r, k2, { s: cell });
         r++; return;
       }
@@ -91,7 +110,7 @@
       tot.amt += amt; tot.prev += prevA; tot.cur += curA; tot.to += prevA + curA;
       r++;
     });
-    // items after the last summary line are not in any Summary line
+    // items not covered by a Summary line
     var lined = { amt: 0, prev: 0, cur: 0, to: 0 };
     sectionRows.forEach(function (x) { if (x.type === 'line') SC.forEach(function (c) { lined[c[2]] += x.sum[c[2]]; }); });
     var leftover = {};
@@ -189,9 +208,9 @@
       if (sec.type === 'group') {
         closeGroup();
         var letter = String.fromCharCode(65 + (gi++ % 26));
-        put(r, 1, { v: letter, s: st({ h: 'center' }, cell) });
-        put(r, 2, { v: sec.title.toUpperCase(), s: st({ h: 'center' }, cell) });
-        for (var k = 3; k <= 6; k++) put(r, k, { s: cell });
+        put(r, 1, { v: letter, s: st({ h: 'center', fill: '4B3BB5', color: 'FFFFFF' }, cell) });
+        put(r, 2, { v: sec.title.toUpperCase(), s: st({ h: 'center', fill: '4B3BB5', color: 'FFFFFF' }, cell) });
+        for (var k = 3; k <= 6; k++) put(r, k, { s: st({ fill: '4B3BB5' }, cell) });
         curGroup = { letter: letter, first: r + 1, sum: { amt: 0, prev: 0, cur: 0, to: 0 } };
         r++; return;
       }
@@ -199,7 +218,7 @@
       put(r, 1, { s: cell });
       put(r, 2, { v: sec.title, s: cell });
       cols.forEach(function (c, k) {
-        if (sec.type === 'line') put(r, 3 + k, { f: q(boqName) + c[1] + sec.row, v: sec.sum[c[2]], s: cellN });
+        if (sec.type === 'line' && sec.row) put(r, 3 + k, { f: q(boqName) + c[1] + sec.row, v: sec.sum[c[2]], s: cellN });
         else put(r, 3 + k, { v: sec.sum[c[2]], s: cellN });
         if (curGroup) curGroup.sum[c[2]] += sec.sum[c[2]];
         grand[c[2]] += sec.sum[c[2]];
