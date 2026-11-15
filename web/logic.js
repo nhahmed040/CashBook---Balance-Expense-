@@ -126,7 +126,7 @@
     if (!b || typeof b !== 'object') return null;
     var name = str(b.name, 40);
     if (!name) return null;
-    return { id: str(b.id, 40) || ('biz' + newId()), name: name, contractor: str(b.contractor, 80), staff: mapList(b.staff, sanitizeStaff, 200) };
+    return { id: str(b.id, 40) || ('biz' + newId()), name: name, staff: mapList(b.staff, sanitizeStaff, 200) };
   }
 
   /* ---------- project parts ---------- */
@@ -251,7 +251,7 @@
       rate: num6(i.rate, 0),
       done: num6(i.done, 0)
     };
-    if (i.kind === 'sum') { out.kind = 'sum'; out.no = ''; out.unit = ''; out.qty = 0; out.rate = 0; out.done = 0; }
+    if (i.kind === 'sum' || i.kind === 'group') { out.kind = i.kind; out.no = ''; out.unit = ''; out.qty = 0; out.rate = 0; out.done = 0; }
     return out;
   }
 
@@ -296,7 +296,8 @@
       certs: mapList(p.certs, sanitizeCert, 1000),
       workers: workers,
       attendance: Object.keys(attMap).map(function (k) { return attMap[k]; }),
-      boq: mapList(p.boq, sanitizeBoqItem, 3000),
+      boq: p.boqLines ? mapList(p.boq, sanitizeBoqItem, 3000) : migrateBoq(mapList(p.boq, sanitizeBoqItem, 3000)),
+      boqLines: 1,
       photos: photoIds(p.photos)
     };
   }
@@ -812,6 +813,7 @@
   // totals add the unrounded line amounts and round once at the end, like a spreadsheet SUM
   function rawSum(list, f) { return round2(list.reduce(function (a, i) { return a + f(i); }, 0)); }
   function isSumRow(i) { return i.kind === 'sum'; }
+  function isGroupRow(i) { return i.kind === 'group'; }
   function isHeading(i) { return i.kind !== 'sum' && !(i.qty > 0) && !(i.rate > 0); }
   /* Summary rows add up the items above them back to the previous summary row (or the top of the list).
      Returns { id: { amt, earned } }. Summary rows are never part of the grand total. */
@@ -897,6 +899,29 @@
     return sections;
   }
 
+  /* Summary lines and group titles are explicit row types. The old guess (a row without quantity or rate is a heading)
+     only builds them once for projects made before: each priced section gets a summary line at its end, and
+     lettered headings ("A. Substructure") become group titles. Returns a new list. */
+  function migrateBoq(boq) {
+    if (!boq.length) return boq;
+    var secs = boqSections({ boq: boq }), insertAfter = {}, group = {};
+    secs.forEach(function (sec) {
+      if (sec.group) { group[sec.from] = true; return; }
+      var total = 0;
+      sec.items.forEach(function (idx) { var it = boq[idx]; if (!isHeading(it) && !isSumRow(it)) total += it.qty * it.rate; });
+      if (total > 0 && !isSumRow(boq[sec.to])) insertAfter[sec.to] = sec.title;
+    });
+    var out = [];
+    boq.forEach(function (it, idx) {
+      if (group[idx]) {
+        var g = JSON.parse(JSON.stringify(it)); g.kind = 'group'; g.no = ''; g.desc = it.desc.replace(/^[A-Za-z]\.\s*/, '') || it.desc;
+        out.push(sanitizeBoqItem(g));
+      } else out.push(it);
+      if (insertAfter[idx] !== undefined) out.push(sanitizeBoqItem({ kind: 'sum', desc: insertAfter[idx] }));
+    });
+    return out;
+  }
+
   /* Variation order from exceed quantities: BoQ items whose executed quantity, up to and including this certificate,
      goes over the contract quantity. Only the excess added since the previous certificate counts for this one. */
   function boqVariation(project, certId) {
@@ -952,6 +977,7 @@
     var subs = boqSubtotals(project);
     project.boq.forEach(function (i) {
       if (isSumRow(i)) { var sb = subs[i.id]; rows.push(['SUM', i.desc, '', '', '', sb.amt.toFixed(2), '', sb.earned.toFixed(2), '']); return; }
+      if (isGroupRow(i)) { rows.push(['GROUP', i.desc, '', '', '', '', '', '', '']); return; }
       if (isHeading(i)) { rows.push([i.no, i.desc, '', '', '', '', '', '', '']); return; }
       rows.push([i.no, i.desc, i.unit, String(i.qty), String(round6(i.rate)), itemAmount(i).toFixed(2), String(i.done),
         itemEarned(i).toFixed(2), i.qty > 0 ? String(round2(i.done / i.qty * 100)) : '']);
@@ -984,9 +1010,9 @@
     function number(v) { return parseFloat(String(v).replace(/,/g, '')) || 0; }
     var items = [], skipped = 0;
     rows.forEach(function (r) {
-      var isSum = String(cell(r, 'no')).trim().toUpperCase() === 'SUM';
+      var mark = String(cell(r, 'no')).trim().toUpperCase(), isSum = mark === 'SUM';
       var it = sanitizeBoqItem({
-        kind: isSum ? 'sum' : undefined,
+        kind: isSum ? 'sum' : (mark === 'GROUP' ? 'group' : undefined),
         no: unquoteFormula(cell(r, 'no')), desc: unquoteFormula(cell(r, 'desc')), unit: unquoteFormula(cell(r, 'unit')),
         qty: number(cell(r, 'qty')), rate: number(cell(r, 'rate')), done: number(cell(r, 'done'))
       });
@@ -1011,7 +1037,7 @@
     billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
-    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
+    sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds

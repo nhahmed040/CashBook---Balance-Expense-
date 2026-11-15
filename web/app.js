@@ -411,14 +411,6 @@
     document.body.appendChild(f);
   }
 
-  /* Contractor name for the Variation Order sheet: set in the business that owns the project's book. */
-  function contractorOf(p) {
-    var bk = state.books.filter(function (b) { return b.projectId === p.id; })[0];
-    var bz = (bk && bk.businessId) ? state.businesses.filter(function (x) { return x.id === bk.businessId; })[0] : null;
-    if (!bz) bz = state.businesses.filter(function (x) { return x.id === state.business; })[0];
-    return bz ? (bz.contractor || '') : '';
-  }
-
   function printCertificate(p, cert) {
     var title = (t('cert_title') + ' ' + (cert.no || '')).trim();
     printDoc(title, window.CBPrint.certificateHtml({
@@ -904,6 +896,11 @@
     var row = el('div', 'btnrow');
     row.appendChild(btn(t('add_item'), '', function () { editBoqItem(p, null); }));
     row.appendChild(btn(t('add_sum_row'), '', function () { editSumRow(p, null, p.boq.length); }));
+    row.appendChild(btn(t('add_group'), '', function () { editGroupRow(p, null, p.boq.length); }));
+    if (p.boq.length && !p.boq.some(L.isSumRow)) row.appendChild(btn(t('make_lines'), '', function () {
+      if (!window.confirm(t('make_lines_ask'))) return;
+      p.boq = L.migrateBoq(p.boq); save(); renderAll();
+    }));
     row.appendChild(btn(t('import_boq'), '', function () { boqTarget = p; $('boqFile').click(); }));
     if (p.boq.length) row.appendChild(btn(t('export_boq'), '', function () {
       saveFile('cashbook-boq-' + safeName(p.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.boqCsv(p));
@@ -924,6 +921,14 @@
         var mb = btn('⋯', 'boqmenu', function (e) { if (e) e.stopPropagation(); boqRowMenu(p, it, pos); });
         mb.setAttribute('aria-label', t('row_menu'));
         return mb;
+      }
+      if (L.isGroupRow(it)) {
+        var gr = el('div', 'boqrow heading grouprow', it.desc);
+        gr.style.cursor = 'pointer';
+        gr.addEventListener('click', function () { editGroupRow(p, it); });
+        gr.appendChild(menuBtn());
+        list.appendChild(gr);
+        return;
       }
       if (L.isSumRow(it)) {
         var sr = el('div', 'boqrow heading sumrow');
@@ -980,13 +985,15 @@
 
   /* Row menu: insert anywhere, move, edit, delete (like a spreadsheet). */
   function boqRowMenu(p, it, pos) {
-    var title = L.isSumRow(it) ? it.desc : ((it.no ? it.no + ' ' : '') + it.desc);
+    var title = (L.isSumRow(it) || L.isGroupRow(it)) ? it.desc : ((it.no ? it.no + ' ' : '') + it.desc);
     var items = [
-      { label: t('edit_item'), run: function () { if (L.isSumRow(it)) editSumRow(p, it); else editBoqItem(p, it); } },
+      { label: t('edit_item'), run: function () { if (L.isSumRow(it)) editSumRow(p, it); else if (L.isGroupRow(it)) editGroupRow(p, it); else editBoqItem(p, it); } },
       { label: t('insert_above'), run: function () { editBoqItem(p, null, pos); } },
       { label: t('insert_below'), run: function () { editBoqItem(p, null, pos + 1); } },
       { label: t('sum_above'), run: function () { editSumRow(p, null, pos); } },
-      { label: t('sum_below'), run: function () { editSumRow(p, null, pos + 1); } }
+      { label: t('sum_below'), run: function () { editSumRow(p, null, pos + 1); } },
+      { label: t('group_above'), run: function () { editGroupRow(p, null, pos); } },
+      { label: t('group_below'), run: function () { editGroupRow(p, null, pos + 1); } }
     ];
     if (pos > 0) items.push({ label: t('move_up'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos - 1, 0, it); save(); renderAll(); } });
     if (pos < p.boq.length - 1) items.push({ label: t('move_down'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos + 1, 0, it); save(); renderAll(); } });
@@ -998,7 +1005,35 @@
     actionSheet(title, items);
   }
 
-  /* Summary row: adds up the items above it, back to the previous summary row. */
+  /* Group title: starts a group (A, B, ...) in the Summary sheet. */
+  function editGroupRow(p, it, pos) {
+    var isNew = !it;
+    openForm({
+      title: t('group_row'),
+      fields: [
+        { key: 'desc', label: t('sum_label'), type: 'text', value: it ? it.desc : '', max: 120, required: true },
+        { type: 'note', text: t('group_note') }
+      ],
+      onSubmit: function (v) {
+        if (isNew) {
+          if (p.boq.length >= 3000) return t('required');
+          var ni = L.sanitizeBoqItem({ kind: 'group', desc: v.desc });
+          if (!ni) return t('required');
+          p.boq.splice(pos == null ? p.boq.length : Math.max(0, Math.min(pos, p.boq.length)), 0, ni);
+        } else it.desc = v.desc.slice(0, 120);
+        save(); renderAll();
+        return null;
+      },
+      onDelete: isNew ? null : function () {
+        if (!window.confirm(t('cf_delete_row', { name: it.desc }))) return false;
+        p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
+        save(); renderAll();
+        return true;
+      }
+    });
+  }
+
+  /* Summary line: adds up the items above it, back to the previous summary row. */
   function editSumRow(p, it, pos) {
     var isNew = !it;
     openForm({
@@ -1357,7 +1392,7 @@
       if (c.balance > 0) row.appendChild(btn(t('receive'), 'primary', function () { receiveCert(p, cert); }));
       row.appendChild(btn(t('print'), '', function () { printCertificate(p, cert); }));
       row.appendChild(btn(t('export_cert_xlsx'), '', function () {
-        saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id, { contractor: contractorOf(p) }));
+        saveWorkbook('Certificate-' + safeName(p.name) + '-' + safeName(cert.no || cert.date), window.CBExcel.certificateWorkbook(p, cert.id));
       }));
       row.appendChild(btn(t('variation_orders') + (cert.variations.length ? ' (' + cert.variations.length + ')' : ''), '', function () { variationList(p, cert); }));
       row.appendChild(btn(t('tax_receipts'), '', function () { editTaxReceipts(cert); }));
@@ -2106,14 +2141,11 @@
   function editBusiness(bz) {
     openForm({
       title: bz ? t('rename_business') : t('add_business'),
-      fields: [
-        { key: 'name', label: t('business_name'), type: 'text', value: bz ? bz.name : '', required: true, max: 40 },
-        { key: 'contractor', label: t('contractor_name'), type: 'text', value: bz ? bz.contractor || '' : '', max: 80 }
-      ],
+      fields: [{ key: 'name', label: t('business_name'), type: 'text', value: bz ? bz.name : '', required: true, max: 40 }],
       onSubmit: function (v) {
-        if (bz) { bz.name = v.name.slice(0, 40); bz.contractor = (v.contractor || '').slice(0, 80); }
+        if (bz) bz.name = v.name.slice(0, 40);
         else {
-          var nb = L.sanitizeBusiness({ id: 'biz' + L.newId(), name: v.name, contractor: v.contractor, staff: [] });
+          var nb = L.sanitizeBusiness({ id: 'biz' + L.newId(), name: v.name, staff: [] });
           state.businesses.push(nb);
           state.business = nb.id;
           var id = 'b' + L.newId();
@@ -2296,7 +2328,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.5.0', APP_BUILD = 19;
+  var APP_VERSION = '2.6.0', APP_BUILD = 20;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

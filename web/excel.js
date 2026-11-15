@@ -44,65 +44,59 @@
     var rateS = st({ fmt: '#,##0.00###', h: 'right' }, cell);
     var qty = st({ fmt: QTY, h: 'right' }, cell);
     var bold = st({ b: true }, cell);
-    var secs = L.boqSections(p), r = 9, sectionRows = [];
+    var r = 9, sectionRows = [];
     var tot = { amt: 0, prev: 0, cur: 0, to: 0 };
+    var SC = [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']];
+    var segStart = r, seg = { amt: 0, prev: 0, cur: 0, to: 0 };
 
-    secs.forEach(function (sec) {
-      put(r, 0, { s: bold }); put(r, 1, { v: sec.title, s: st({ fill: SEC_FILL }, bold) });
-      for (var k = 2; k <= 11; k++) put(r, k, { s: cell });
-      r++;
-      if (sec.group) { sectionRows.push({ row: 0, title: sec.title, group: true }); return; }
-      var first = r, sum = { amt: 0, prev: 0, cur: 0, to: 0 };
-      var segStart = r, seg = { amt: 0, prev: 0, cur: 0, to: 0 }, segs = [];
-      var SC = [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']];
-      sec.items.forEach(function (idx) {
-        var pr = progress[idx], it = pr.item;
-        if (L.isSumRow(it)) {
-          var segEnd = r - 1, sty = st({ fmt: MONEY, h: 'right', b: true, fill: SEC_FILL }, cell);
-          put(r, 0, { s: st({ fill: SEC_FILL }, bold) }); put(r, 1, { v: it.desc, s: st({ h: 'right', fill: SEC_FILL }, bold) });
-          for (var kk = 2; kk <= 4; kk++) put(r, kk, { s: st({ fill: SEC_FILL }, cell) });
-          SC.forEach(function (c) {
-            put(r, c[1], { f: segStart <= segEnd ? 'SUM(' + c[0] + segStart + ':' + c[0] + segEnd + ')' : '0', v: seg[c[2]], s: sty });
-          });
-          [6, 7, 8].forEach(function (k5) { put(r, k5, { s: st({ fill: SEC_FILL }, cell) }); });
-          if (segStart <= segEnd) segs.push([segStart, segEnd, seg]);
-          segStart = r + 1; seg = { amt: 0, prev: 0, cur: 0, to: 0 };
-          r++; return;
-        }
-        if (L.isHeading(it)) {
-          put(r, 0, { v: it.no, s: cell }); put(r, 1, { v: it.desc, s: bold });
-          for (var k2 = 2; k2 <= 11; k2++) put(r, k2, { s: cell });
-          r++; return;
-        }
-        var amt = it.qty * it.rate, prevA = it.rate * pr.prev, curA = it.rate * pr.cur;
-        put(r, 0, { v: it.no, s: st({ h: 'center', v: 'top' }, cell) });
-        put(r, 1, { v: it.desc, s: text });
-        put(r, 2, { v: it.unit, s: st({ h: 'center', v: 'top' }, cell) });
-        put(r, 3, { v: it.qty, s: qty });
-        put(r, 4, { v: it.rate, s: rateS });
-        put(r, 5, { f: 'E' + r + '*D' + r, v: amt, s: num });
-        put(r, 6, { v: pr.prev || null, s: qty });
-        put(r, 7, { v: pr.cur || null, s: qty });
-        put(r, 8, { f: 'G' + r + '+H' + r, v: pr.prev + pr.cur, s: qty });
-        put(r, 9, { f: 'E' + r + '*G' + r, v: prevA, s: num });
-        put(r, 10, { f: 'E' + r + '*H' + r, v: curA, s: num });
-        put(r, 11, { f: 'J' + r + '+K' + r, v: prevA + curA, s: num });
-        sum.amt += amt; sum.prev += prevA; sum.cur += curA; sum.to += prevA + curA;
-        seg.amt += amt; seg.prev += prevA; seg.cur += curA; seg.to += prevA + curA;
-        r++;
-      });
-      var last = r - 1;
-      if (segStart <= last) segs.push([segStart, last, seg]);
-      put(r, 0, { s: bold }); put(r, 1, { v: 'Total carried to summary', s: st({ h: 'right' }, bold) });
-      for (var k3 = 2; k3 <= 4; k3++) put(r, k3, { s: cell });
-      [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']].forEach(function (c) {
-        put(r, c[1], { f: segs.length ? segs.map(function (g) { return 'SUM(' + c[0] + g[0] + ':' + c[0] + g[1] + ')'; }).join('+') : '0', v: sum[c[2]], s: st({ fmt: MONEY, h: 'right', b: true }, cell) });
-      });
-      [6, 7, 8].forEach(function (k4) { put(r, k4, { s: cell }); });
-      sectionRows.push({ row: r, title: sec.title, group: false, sum: sum });
-      tot.amt += sum.amt; tot.prev += sum.prev; tot.cur += sum.cur; tot.to += sum.to;
+    p.boq.forEach(function (it, idx) {
+      var pr = progress[idx];
+      if (L.isGroupRow(it)) {
+        put(r, 0, { s: bold }); put(r, 1, { v: it.desc, s: st({ fill: SEC_FILL, h: 'center' }, bold) });
+        for (var kg = 2; kg <= 11; kg++) put(r, kg, { s: cell });
+        sectionRows.push({ type: 'group', title: it.desc });
+        r++; return;
+      }
+      if (L.isSumRow(it)) {
+        var segEnd = r - 1, sty = st({ fmt: MONEY, h: 'right', b: true, fill: SEC_FILL }, cell);
+        put(r, 0, { s: st({ fill: SEC_FILL }, bold) }); put(r, 1, { v: it.desc, s: st({ h: 'right', fill: SEC_FILL }, bold) });
+        for (var kk = 2; kk <= 4; kk++) put(r, kk, { s: st({ fill: SEC_FILL }, cell) });
+        SC.forEach(function (c) {
+          put(r, c[1], { f: segStart <= segEnd ? 'SUM(' + c[0] + segStart + ':' + c[0] + segEnd + ')' : '0', v: seg[c[2]], s: sty });
+        });
+        [6, 7, 8].forEach(function (k5) { put(r, k5, { s: st({ fill: SEC_FILL }, cell) }); });
+        sectionRows.push({ type: 'line', row: r, title: it.desc, sum: seg });
+        segStart = r + 1; seg = { amt: 0, prev: 0, cur: 0, to: 0 };
+        r++; return;
+      }
+      if (L.isHeading(it)) {
+        put(r, 0, { v: it.no, s: cell }); put(r, 1, { v: it.desc, s: bold });
+        for (var k2 = 2; k2 <= 11; k2++) put(r, k2, { s: cell });
+        r++; return;
+      }
+      var amt = it.qty * it.rate, prevA = it.rate * pr.prev, curA = it.rate * pr.cur;
+      put(r, 0, { v: it.no, s: st({ h: 'center', v: 'top' }, cell) });
+      put(r, 1, { v: it.desc, s: text });
+      put(r, 2, { v: it.unit, s: st({ h: 'center', v: 'top' }, cell) });
+      put(r, 3, { v: it.qty, s: qty });
+      put(r, 4, { v: it.rate, s: rateS });
+      put(r, 5, { f: 'E' + r + '*D' + r, v: amt, s: num });
+      put(r, 6, { v: pr.prev || null, s: qty });
+      put(r, 7, { v: pr.cur || null, s: qty });
+      put(r, 8, { f: 'G' + r + '+H' + r, v: pr.prev + pr.cur, s: qty });
+      put(r, 9, { f: 'E' + r + '*G' + r, v: prevA, s: num });
+      put(r, 10, { f: 'E' + r + '*H' + r, v: curA, s: num });
+      put(r, 11, { f: 'J' + r + '+K' + r, v: prevA + curA, s: num });
+      seg.amt += amt; seg.prev += prevA; seg.cur += curA; seg.to += prevA + curA;
+      tot.amt += amt; tot.prev += prevA; tot.cur += curA; tot.to += prevA + curA;
       r++;
     });
+    // items after the last summary line are not in any Summary line
+    var lined = { amt: 0, prev: 0, cur: 0, to: 0 };
+    sectionRows.forEach(function (x) { if (x.type === 'line') SC.forEach(function (c) { lined[c[2]] += x.sum[c[2]]; }); });
+    var leftover = {};
+    SC.forEach(function (c) { leftover[c[2]] = Math.round((tot[c[2]] - lined[c[2]]) * 1e6) / 1e6; });
+    if (Math.abs(leftover.amt) > 0.005 || Math.abs(leftover.to) > 0.005) sectionRows.push({ type: 'rest', title: 'Items not in a summary line', sum: leftover });
     return {
       sheet: { name: sheetName, cols: [9, 56, 8, 12, 14, 17, 12, 12, 14, 16, 16, 17], rows: rows, merges: merges, heights: heights, landscape: true },
       sectionRows: sectionRows, totals: tot
@@ -110,7 +104,7 @@
   }
 
   /* ---------- Variation Order sheet (follows the user's "Variation order format" workbook) ---------- */
-  function variationOrderSheet(p, cert, orderNo, info) {
+  function variationOrderSheet(p, cert, orderNo) {
     var rows = [], merges = [], heights = {};
     function put(r, c, v) { while (rows.length < r) rows.push(null); if (!rows[r - 1]) rows[r - 1] = []; rows[r - 1][c] = v; }
     function col(i) { return String.fromCharCode(65 + i); }
@@ -125,7 +119,7 @@
     put(3, 1, { v: 'Project :- ' + p.name, s: info12 });
     put(4, 1, { v: 'Location :- ' + (p.location || ''), s: info12 });
     put(5, 1, { v: 'Client :- ' + (p.client || ''), s: info12 });
-    put(6, 1, { v: 'Contractor:- ' + ((info && info.contractor) || ''), s: info12 });
+    put(6, 1, { v: 'Contractor:- ' + (p.contractor || ''), s: info12 });
     var hs = st({ b: true, h: 'center', border: 'thin', fill: HEAD_FILL, wrap: true }, base);
     var heads1 = ['No', 'Work Description', 'Unit', 'Contract', '', '', 'Excuted Work'];
     for (var i = 0; i <= cAm; i++) { put(8, i, { v: i < 3 ? heads1[i] : (i === 3 ? 'Contract' : (i === 6 ? 'Executed Work' : '')), s: hs }); put(9, i, { s: hs }); }
@@ -190,13 +184,13 @@
       });
       groupRows.push(r); r++; curGroup = null;
     }
-    var n = 0, plain = { first: 0, rows: [] };
+    var n = 0, gi = 0, plain = { first: 0, rows: [] };
     boq.sectionRows.forEach(function (sec) {
-      if (sec.group) {
+      if (sec.type === 'group') {
         closeGroup();
-        var letter = (/^[A-Za-z]/.exec(sec.title) || ['•'])[0].toUpperCase();
+        var letter = String.fromCharCode(65 + (gi++ % 26));
         put(r, 1, { v: letter, s: st({ h: 'center' }, cell) });
-        put(r, 2, { v: sec.title.replace(/^[A-Za-z]\.\s*/, '').toUpperCase(), s: st({ h: 'center' }, cell) });
+        put(r, 2, { v: sec.title.toUpperCase(), s: st({ h: 'center' }, cell) });
         for (var k = 3; k <= 6; k++) put(r, k, { s: cell });
         curGroup = { letter: letter, first: r + 1, sum: { amt: 0, prev: 0, cur: 0, to: 0 } };
         r++; return;
@@ -205,11 +199,12 @@
       put(r, 1, { s: cell });
       put(r, 2, { v: sec.title, s: cell });
       cols.forEach(function (c, k) {
-        put(r, 3 + k, { f: q(boqName) + c[1] + sec.row, v: sec.sum[c[2]], s: cellN });
+        if (sec.type === 'line') put(r, 3 + k, { f: q(boqName) + c[1] + sec.row, v: sec.sum[c[2]], s: cellN });
+        else put(r, 3 + k, { v: sec.sum[c[2]], s: cellN });
         if (curGroup) curGroup.sum[c[2]] += sec.sum[c[2]];
         grand[c[2]] += sec.sum[c[2]];
       });
-      plain.rows.push(r);
+      if (!curGroup) plain.rows.push(r);
       r++;
     });
     closeGroup();
@@ -218,8 +213,8 @@
     put(r, 1, { s: cell }); put(r, 2, { v: 'TOTAL', s: st({ fill: HEAD_FILL, h: 'center' }, cell) });
     cols.forEach(function (c, k) {
       var f;
-      if (groupRows.length) f = groupRows.map(function (g) { return c[0] + g; }).join('+');
-      else f = plain.rows.length ? 'SUM(' + c[0] + plain.rows[0] + ':' + c[0] + plain.rows[plain.rows.length - 1] + ')' : '0';
+      var parts = groupRows.concat(plain.rows);
+      f = parts.length ? parts.map(function (g) { return c[0] + g; }).join('+') : '0';
       put(r, 3 + k, { f: f, v: grand[c[2]], s: st({ fill: HEAD_FILL }, cellN) });
     });
     r++;
@@ -357,10 +352,10 @@
 
     // certification text and signatures
     var endRow = Math.max(aEnd + 3, 35);
-    put(endRow, B, { v: 'We certify that the contractor is now entitled to the sum of Birr (' + L.amountWords(cc.payable) + ').', s: st({ sz: 11, b: true, h: 'center', wrap: true }, base) });
+    put(endRow, B, { v: 'We certify that the contractor' + (p.contractor ? ' (' + p.contractor + ')' : '') + ' is now entitled to the sum of Birr (' + L.amountWords(cc.payable) + ').', s: st({ sz: 11, b: true, h: 'center', wrap: true }, base) });
     merges.push('B' + endRow + ':H' + endRow); heights[endRow] = 32;
     var sg = endRow + 3;
-    put(sg, B, { v: 'Certified by:______________________', s: bold }); put(sg, F, { v: 'Approved by', s: st({ b: true, h: 'right' }, base) });
+    put(sg, B, { v: p.contractor ? 'Certified by: ' + p.contractor : 'Certified by:______________________', s: bold }); put(sg, F, { v: 'Approved by', s: st({ b: true, h: 'right' }, base) });
     put(sg + 1, B, { v: 'Signature:____________', s: bold }); put(sg + 1, F, { v: 'Signature :  ', s: st({ b: true, h: 'right' }, base) }); put(sg + 1, G, { v: '_____________________________', s: base });
     put(sg + 2, B, { v: 'Date_______________', s: bold }); put(sg + 2, F, { v: 'Date :  ', s: st({ b: true, h: 'right' }, base) }); put(sg + 2, G, { v: '_____________________________', s: base });
     return { name: 'Certificate', cols: [2.6, 24.7, 16, 17.3, 9.1, 34.4, 26.9, 21.6], rows: rows, merges: merges, heights: heights, hideGrid: true };
@@ -372,7 +367,7 @@
   }
 
   /* Certificate + summary + BOQ workbook for one certificate. */
-  function certificateWorkbook(project, certId, info) {
+  function certificateWorkbook(project, certId) {
     var p = prep(project);
     var cert = null;
     p.certs.forEach(function (c) { if (c.id === certId) cert = c; });
@@ -383,7 +378,7 @@
     var certSheet = certificateSheet(p, cert, sum, 'Summary');
     var sheets = [certSheet, sum.sheet, boq.sheet];
     var vNo = L.variationOrderNo(p, certId);
-    if (vNo > 0) sheets.push(variationOrderSheet(p, cert, vNo, info));
+    if (vNo > 0) sheets.push(variationOrderSheet(p, cert, vNo));
     return { sheets: sheets };
   }
 

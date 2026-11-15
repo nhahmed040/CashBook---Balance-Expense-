@@ -90,6 +90,12 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Due from client** = net pay − (cash received + withholding and VAT withheld whose tax receipt is entered). Record receipts as the cash that reached you; the tax parts settle when their receipts are entered on the certificate.
 - **Contractor name** is set in the business (Entries → business → edit) and prints on the Variation Order sheet.
 
+## Summary lines, group titles and one contractor name (2.6)
+
+- **BoQ row types:** items, plain rows (notes and unpriced lines, shown as before, never in the Summary sheet), **Summary line** and **Group title**. The Summary sheet is built only from Summary lines (title + total of the items above, back to the previous summary line) and Group titles (A, B, … with TOTAL (A) when the next group starts). Items after the last summary line show as “Items not in a summary line”.
+- **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
+- **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
+
 ## Build locally
 
 Needs JDK 17, the Android SDK and Gradle 8.7:

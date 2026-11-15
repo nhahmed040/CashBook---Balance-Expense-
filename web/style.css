@@ -510,3 +510,6 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .aboutsec { width: 100%; text-align: left; background: var(--bg); border-radius: 12px; padding: 8px 12px; margin: 4px 0; }
 .aboutsec summary { font-weight: 700; cursor: pointer; }
 .aboutsec ul { margin: 8px 0 2px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: .92rem; }
+
+.boqrow.grouprow { background: var(--soft, rgba(124,92,255,.14)); font-size: 1.02rem; text-transform: uppercase; letter-spacing: .02em; border-top: 3px double var(--border); }
+.boqrow.sumrow { background: rgba(124,92,255,.07); }

@@ -55,7 +55,8 @@
   }
 
   function signatures(d) {
-    return '<div class="sign"><div>' + esc(d.t('contractor')) + '<br>' + esc(d.t('signature')) +
+    var cn = d.project && d.project.contractor ? ' – ' + d.project.contractor : '';
+    return '<div class="sign"><div>' + esc(d.t('contractor') + cn) + '<br>' + esc(d.t('signature')) +
       '</div><div>' + esc(d.t('consultant')) + '<br>' + esc(d.t('signature')) + '</div></div>';
   }
 
@@ -66,7 +67,7 @@
     var title = t('cert_title') + ' ' + (c.no || '');
     var h = '<h1>' + esc(title) + '</h1><p class="sub">' + esc(p.name) + '</p>';
     h += metaRows([
-      [t('client_name'), p.client], [t('location'), p.location], [t('date'), fd(c.date)],
+      [t('client_name'), p.client], [t('contractor_name'), p.contractor], [t('location'), p.location], [t('date'), fd(c.date)],
       [t('contract_sum'), m(p.contractSum)], [t('prepared'), fd(d.date)]
     ]);
 
@@ -136,7 +137,7 @@
     var title = t('statement_title') + ' – ' + p.name;
     var h = '<h1>' + esc(t('statement_title')) + '</h1><p class="sub">' + esc(p.name) + '</p>';
     h += metaRows([
-      [t('client_name'), p.client], [t('location'), p.location],
+      [t('client_name'), p.client], [t('contractor_name'), p.contractor], [t('location'), p.location],
       [t('start_date'), fd(p.startDate)], [t('end_date'), fd(p.endDate)], [t('prepared'), fd(d.date)]
     ]);
 
