@@ -96,6 +96,14 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Import the BoQ from Excel (2.9)
+
+- On a project's BoQ tab, **Import BoQ (Excel or CSV)** reads an `.xlsx` file directly (no CSV conversion).
+- The sheet with a header row of Description / Unit / Qty / Rate is found automatically (sheets named BoQ first).
+- Row types are detected: rows with qty and rate = item; “Total carried to summary” = total; “A. Substructure” = group title; “2. Concrete work” = summary line; other text rows = plain rows. Grand total and VAT rows are left out.
+- A preview lists every row with its type and the contract total before anything changes. Choose **Replace** or **Add after current rows**; an Undo message follows.
+- Item descriptions can now be up to 400 characters.
+
 ## Never lose your data (2.8)
 
 - **Back up everything** (Settings → Data) saves one `.json` file with all books, projects, contacts **and photos**. On a new phone use **Restore from a backup file**. Old backup files and the separate photo file still restore.

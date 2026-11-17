@@ -240,7 +240,7 @@
 
   function sanitizeBoqItem(i) {
     if (!i || typeof i !== 'object') return null;
-    var desc = str(i.desc, 120);
+    var desc = str(i.desc, 400);
     if (!desc) return null;
     var out = {
       id: validId(i.id) ? i.id : newId(),
@@ -1108,6 +1108,76 @@
     return { items: mapList(items, function (x) { return x; }, 3000), skipped: skipped };
   }
 
+  /* ---------- BoQ from an Excel sheet (rows of cell values) ----------
+     Finds the header row (Description + Qty + Rate), then types every row:
+       qty and rate filled          -> item
+       "Total carried to summary"   -> sum
+       "A. Substructure"            -> group title
+       "2. Concrete work"           -> summary line
+       other text-only rows         -> plain row
+       GRAND TOTAL / VAT rows       -> left out (the app works them out)
+     Returns null when the sheet has no BoQ header. */
+  function boqFromRows(rows) {
+    var head = -1, idx = null, r, c;
+    function cellText(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+    for (r = 0; r < Math.min(rows.length, 60) && head < 0; r++) {
+      var cur = { no: -1, desc: -1, unit: -1, qty: -1, rate: -1 };
+      (rows[r] || []).forEach(function (h, pos) {
+        h = cellText(h);
+        if (!h) return;
+        if (/^(description|descr|particulars|work description|item description)/i.test(h)) { if (cur.desc < 0) cur.desc = pos; }
+        else if (/^(unit|uom|u\/m)\.?$/i.test(h)) { if (cur.unit < 0) cur.unit = pos; }
+        else if (/^(qty|quantity)\.?$/i.test(h)) { if (cur.qty < 0) cur.qty = pos; }
+        else if (/^(unit )?(rate|price)/i.test(h)) { if (cur.rate < 0) cur.rate = pos; }
+        else if (/^(item( no\.?)?|no\.?|ref\.?|code|s\/n|sn)$/i.test(h)) { if (cur.no < 0) cur.no = pos; }
+      });
+      if (cur.desc >= 0 && cur.qty >= 0 && cur.rate >= 0) { head = r; idx = cur; }
+    }
+    if (head < 0) return null;
+    if (idx.no < 0 && idx.desc > 0) idx.no = idx.desc - 1;
+    function num(v) {
+      if (typeof v === 'number') return isFinite(v) ? v : 0;
+      var n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
+      return isFinite(n) ? n : 0;
+    }
+    var items = [], counts = { item: 0, row: 0, line: 0, group: 0, sum: 0 }, skipped = 0;
+    for (r = head + 1; r < rows.length; r++) {
+      var row = rows[r] || [];
+      var rawDesc = String(row[idx.desc] == null ? '' : row[idx.desc]);
+      var two = /^\s*[A-Z]\s*[.)]\s+\S[^\n]*?(?:\n|\s{4,})\s*\d{1,2}\s*[.)]\s*\S/.exec(rawDesc);
+      if (two && !(num(row[idx.qty]) > 0)) {   // "A. Substructure" and "1. Excavation" in one cell
+        var parts = rawDesc.trim().split(/\n+|\s{4,}/);
+        var g = sanitizeBoqItem({ kind: 'group', desc: cellText(parts[0]) }), ln = sanitizeBoqItem({ kind: 'line', desc: cellText(parts.slice(1).join(' ')) });
+        if (g && ln) { counts.group++; counts.line++; items.push({ item: g, type: 'group' }, { item: ln, type: 'line' }); continue; }
+      }
+      var desc = cellText(row[idx.desc]), no = idx.no >= 0 ? cellText(row[idx.no]) : '';
+      var unit = idx.unit >= 0 ? cellText(row[idx.unit]) : '';
+      var qty = num(row[idx.qty]), rate = num(row[idx.rate]);
+      if (!desc && !no) continue;
+      if (!desc) { desc = no; no = ''; }
+      var low = desc.toLowerCase();
+      var it = null, kind;
+      if (/^total\s+carried\s+to\s+summary/.test(low) || /^total\s+to\s+summary/.test(low) || /^carried\s+to\s+summary/.test(low)) {
+        kind = 'sum'; it = { kind: 'sum', desc: desc.replace(/[:\s]+$/, '') };
+      } else if (/^(grand\s+total|total\b|sub\s*-?\s*total|vat\b|\d+\s*%\s*vat|contingenc)/.test(low) && !(qty > 0 && rate > 0)) {
+        skipped++; continue;
+      } else if (qty > 0 && rate > 0) {
+        kind = 'item'; it = { no: no, desc: desc, unit: unit, qty: qty, rate: rate };
+      } else if (!no && !unit && /^[A-Z]\s*[.)]\s+\S/.test(desc)) {
+        kind = 'group'; it = { kind: 'group', desc: desc };
+      } else if (!no && !unit && /^\d{1,2}\s*[.)]\s*\S/.test(desc) && !/^\d{1,2}\s*[.)]\s*\d/.test(desc)) {
+        kind = 'line'; it = { kind: 'line', desc: desc };
+      } else {
+        kind = 'row'; it = { no: no, desc: desc, unit: unit, qty: qty, rate: rate };
+      }
+      var clean = sanitizeBoqItem(it);
+      if (!clean) { skipped++; continue; }
+      counts[kind]++;
+      items.push({ item: clean, type: kind });
+    }
+    return { items: items.slice(0, 3000), counts: counts, skipped: skipped, headerRow: head + 1 };
+  }
+
   return {
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,
     sanitizeContact: sanitizeContact, sanitizeBusiness: sanitizeBusiness, contactBalances: contactBalances,
@@ -1127,7 +1197,7 @@
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
-    boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds,
+    boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, photoIds: photoIds,
     TRASH_DAYS: TRASH_DAYS, sanitizeTrash: sanitizeTrash, trashPhotoIds: trashPhotoIds, trashRestoreItem: trashRestoreItem
   };
 });

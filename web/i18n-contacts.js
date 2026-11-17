@@ -3,6 +3,12 @@
 (function () {
   var add = {
     en: {
+      import_boq: 'Import BoQ (Excel or CSV)', import_preview: 'Import BoQ from Excel',
+      import_counts: '{i} items, {r} plain rows, {l} summary lines, {g} group titles, {s} totals. Contract total {tot}.',
+      import_skipped: '{n} total/VAT rows left out (the app works them out).',
+      import_replace: 'Replace the current BoQ ({n} rows)', import_add: 'Add after the current rows',
+      import_replace_confirm: 'Replace the {n} BoQ rows of “{name}” with the imported rows?', import_do: 'Import',
+      import_done: 'Imported {n} rows', import_no_boq: 'No BoQ table found. The sheet needs Description, Qty and Rate columns.', import_replaced: 'BoQ replaced by import',
       about_new_8: 'One backup file with data and photos, a 7-day backup reminder, and Recently deleted (30 days, with Undo)',
       deleted_toast: 'Deleted “{n}”', undo: 'Undo', restored_item: 'Restored', cleared: 'cleared', recently_deleted: 'Recently deleted',
       trash_note: 'Deleted items stay here for 30 days. Restore them, or delete them for good.', trash_empty: 'Nothing deleted recently.',

@@ -543,3 +543,13 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .trashrow .stext b { overflow-wrap: anywhere; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bkbanner { background: #3a2f10; color: #f5e3b0; border-color: #6b5518; } }
 :root[data-theme="dark"] .bkbanner { background: #3a2f10; color: #f5e3b0; border-color: #6b5518; }
+
+/* BoQ import preview */
+.importmodal { max-height: 90vh; overflow: auto; }
+.importlist { max-height: 42vh; overflow: auto; border: 1px solid rgba(128,128,128,.3); border-radius: 10px; margin: 8px 0; }
+.improw { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,.18); font-size: .88rem; }
+.improw .stext { display: flex; flex-direction: column; min-width: 0; }
+.improw .stext b { font-weight: 500; overflow-wrap: anywhere; }
+.imp-group .stext b, .imp-line .stext b { font-weight: 700; }
+.imp-sum { background: rgba(90,79,240,.08); }
+.impmode label { display: flex; gap: 6px; align-items: center; margin: 6px 0; }

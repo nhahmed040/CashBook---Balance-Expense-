@@ -207,7 +207,7 @@
         <button type="button" id="restoreBtn" class="block" data-i18n="restore">Restore from file</button>
         <button type="button" id="prerestoreBtn" class="block" data-i18n="prerestore" hidden>Undo last restore</button>
         <button type="button" id="trashBtn" class="block">Recently deleted</button>
-        <input type="file" id="boqFile" accept=".csv,text/csv,text/plain" hidden>
+        <input type="file" id="boqFile" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain" hidden>
         <input type="file" id="restoreFile" accept=".json,.csv,application/json,text/csv,text/plain" hidden>
         <button type="button" id="exportBtn" class="block" data-i18n="export_csv">Export this book (CSV)</button>
         <button type="button" id="clearBtn" class="block danger" data-i18n="clear_book">Clear this book</button>
@@ -363,6 +363,7 @@
   <script src="i18n-contacts.js"></script>
   <script src="print.js"></script>
   <script src="xlsx.js"></script>
+  <script src="xlsxread.js"></script>
   <script src="excel.js"></script>
   <script src="photos.js"></script>
   <script src="calendar.js"></script>

@@ -1151,6 +1151,66 @@
     });
   }
 
+  /* Excel BoQ import: pick the sheet, check the detected row types, then replace or add */
+  function boqImportPreview(p, sheets) {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal importmodal');
+    var cur = 0, mode = p.boq.length ? 'replace' : 'add';
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    var TAG = { item: 'rt_item', row: 'rt_note', line: 'rt_line', sum: 'rt_sum', group: 'rt_group' };
+    function draw() {
+      var res = sheets[cur].res;
+      m.textContent = '';
+      m.appendChild(el('h2', null, t('import_preview')));
+      if (sheets.length > 1) {
+        var sel = el('select');
+        sheets.forEach(function (sh, i) { sel.appendChild(option(String(i), sh.name)); });
+        sel.value = String(cur);
+        sel.addEventListener('change', function () { cur = Number(sel.value); draw(); });
+        m.appendChild(sel);
+      }
+      var total = 0;
+      res.items.forEach(function (x) { if (x.type === 'item') total += x.item.qty * x.item.rate; });
+      var c = res.counts;
+      m.appendChild(el('p', 'small', t('import_counts', { i: c.item, r: c.row, l: c.line, g: c.group, s: c.sum, tot: money(total) })));
+      if (res.skipped) m.appendChild(el('p', 'muted small', t('import_skipped', { n: res.skipped })));
+      var list = el('div', 'importlist');
+      res.items.forEach(function (x) {
+        var r = el('div', 'improw imp-' + x.type);
+        r.appendChild(el('span', 'boqtag', t(TAG[x.type])));
+        var tx = el('span', 'stext');
+        tx.appendChild(el('b', null, (x.item.no ? x.item.no + ' ' : '') + x.item.desc));
+        if (x.type === 'item') tx.appendChild(el('small', 'muted', x.item.qty + ' ' + x.item.unit + ' × ' + x.item.rate));
+        r.appendChild(tx);
+        list.appendChild(r);
+      });
+      m.appendChild(list);
+      if (p.boq.length) {
+        var opts = el('div', 'impmode');
+        [['replace', 'import_replace'], ['add', 'import_add']].forEach(function (o) {
+          var lab = el('label', 'check'), rb = el('input');
+          rb.type = 'radio'; rb.name = 'impmode'; rb.checked = mode === o[0];
+          rb.addEventListener('change', function () { mode = o[0]; });
+          lab.appendChild(rb); lab.appendChild(el('span', null, ' ' + t(o[1], { n: p.boq.length })));
+          opts.appendChild(lab);
+        });
+        m.appendChild(opts);
+      }
+      m.appendChild(btn(t('import_do'), 'block primary', function () {
+        if (mode === 'replace' && p.boq.length && !window.confirm(t('import_replace_confirm', { name: p.name, n: p.boq.length }))) return;
+        var before = p.boq.slice();
+        var next = res.items.map(function (x) { var i = x.item; i.id = L.newId(); return i; });
+        p.boq = (mode === 'replace' ? next : p.boq.concat(next)).slice(0, 3000);
+        p.boqLines = 2;
+        save(); renderAll(); close();
+        toast(t('import_done', { n: next.length }), { label: t('undo'), run: function () { p.boq = before; save(); renderAll(); } });
+      }));
+      m.appendChild(btn(t('cancel'), 'block', close));
+    }
+    draw();
+    ov.appendChild(m);
+    document.body.appendChild(ov);
+  }
+
   $('boqFile').addEventListener('change', function () {
     var file = this.files && this.files[0];
     var input = this;
@@ -1158,6 +1218,20 @@
     if (!file || !p) { input.value = ''; return; }
     var reader = new FileReader();
     reader.onerror = function () { toast(t('restore_fail')); input.value = ''; };
+    if (/\.xlsx$/i.test(file.name) || (file.type || '').indexOf('spreadsheetml') >= 0) {
+      reader.onload = function () {
+        input.value = '';
+        window.CBXlsxRead.read(reader.result).then(function (all) {
+          var found = [];
+          all.forEach(function (sh) { var res = L.boqFromRows(sh.rows); if (res && res.items.length) found.push({ name: sh.name + ' (' + res.items.length + ')', res: res, key: sh.name }); });
+          found.sort(function (a, b) { return (/boq|bill|quantit/i.test(b.key) ? 1 : 0) - (/boq|bill|quantit/i.test(a.key) ? 1 : 0); });
+          if (!found.length) { toast(t('import_no_boq')); return; }
+          boqImportPreview(p, found);
+        }).catch(function () { toast(t('restore_fail')); });
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
     reader.onload = function () {
       input.value = '';
       var res = L.boqFromCsv(String(reader.result || ''));
@@ -2390,7 +2464,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.8.0', APP_BUILD = 22;
+  var APP_VERSION = '2.9.0', APP_BUILD = 23;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
