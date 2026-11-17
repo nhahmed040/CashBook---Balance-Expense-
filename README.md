@@ -96,6 +96,14 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Never lose your data (2.8)
+
+- **Back up everything** (Settings → Data) saves one `.json` file with all books, projects, contacts **and photos**. On a new phone use **Restore from a backup file**. Old backup files and the separate photo file still restore.
+- The app shows a reminder on the Books screen when there has been no backup for 7 days (or ever). “Later” hides it for a day.
+- Before a restore the current data is kept on the phone: **Undo last restore** brings it back.
+- **Recently deleted**: deleted entries, BoQ rows, bills, certificates, contacts, projects and books stay recoverable for 30 days (Settings → Data), and a “Deleted · Undo” message appears right after each deletion. Photos of deleted items are kept until the item is deleted for good.
+- The trash is local to the phone and is not synced online. Restored books come back as local copies.
+
 ## Five BoQ row types (2.7)
 
 - **Item** (priced), **Plain row** (note, never in the Summary sheet), **Summary line** (a title such as “1. Excavation and Earth Work”; its value is the next total below it), **Total carried to summary** (adds up the items above it back to the previous total, as before) and **Group title** (A, B … in the Summary sheet).

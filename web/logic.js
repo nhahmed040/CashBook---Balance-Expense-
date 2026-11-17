@@ -312,8 +312,56 @@
       projects: [],
       contacts: [],
       businesses: [],
-      business: ''
+      business: '',
+      trash: []
     };
+  }
+
+  /* ---------- Recently deleted: removed items stay recoverable for 30 days ---------- */
+  var TRASH_DAYS = 30, TRASH_MAX = 200;
+  var TRASH_KINDS = ['entry', 'boqrow', 'bill', 'cert', 'contact', 'project', 'book'];
+  function sanitizeTrash(list, now) {
+    var out = [], seen = {};
+    now = now || Date.now();
+    (Array.isArray(list) ? list : []).forEach(function (r) {
+      if (!r || typeof r !== 'object' || TRASH_KINDS.indexOf(r.kind) < 0) return;
+      if (!r.payload || typeof r.payload !== 'object') return;
+      var at = Number(r.deletedAt);
+      if (!isFinite(at) || at <= 0 || now - at > TRASH_DAYS * 86400000) return;
+      var id = validId(r.id) ? r.id : newId();
+      if (seen[id]) return;
+      seen[id] = true;
+      out.push({
+        id: id, kind: r.kind, label: str(r.label, 120), deletedAt: at, payload: r.payload,
+        ctx: r.ctx && typeof r.ctx === 'object' ? r.ctx : {},
+        photos: (Array.isArray(r.photos) ? r.photos : []).filter(validId).slice(0, 2000)
+      });
+    });
+    out.sort(function (a, b) { return b.deletedAt - a.deletedAt; });
+    return out.slice(0, TRASH_MAX);
+  }
+  /* Photos still needed by items in the trash (so they are not removed early). */
+  function trashPhotoIds(trash) {
+    var ids = [];
+    (trash || []).forEach(function (r) { ids = ids.concat(r.photos || []); });
+    return ids;
+  }
+  /* Clean copy of a trashed payload, ready to be put back (null if unusable). */
+  function trashRestoreItem(rec) {
+    var x = rec.payload;
+    switch (rec.kind) {
+      case 'entry': return sanitizeEntry(x);
+      case 'boqrow': return sanitizeBoqItem(x);
+      case 'bill': return sanitizeBill(x);
+      case 'cert': return sanitizeCert(x);
+      case 'contact': return sanitizeContact(x);
+      case 'project': return sanitizeProject(x, 1);
+      case 'book':
+        var b = sanitizeState({ books: [x], projects: [], contacts: [] }, {}).books[0];
+        if (b && !(x && Array.isArray(x.entries) && x.entries.length) && b.entries.length === 0) b.name = str(x && x.name, 40) || b.name;
+        return b;
+    }
+    return null;
   }
 
   /* opts.keepPin: carry pinHash/pinSalt from raw (true for local storage, false for imports) */
@@ -398,6 +446,7 @@
         s.current = typeof raw.current === 'string' && seenIds[raw.current] ? raw.current : books[0].id;
       }
     }
+    s.trash = sanitizeTrash(raw.trash);
     return s;
   }
 
@@ -1078,6 +1127,7 @@
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
-    boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds
+    boqCsv: boqCsv, boqFromCsv: boqFromCsv, photoIds: photoIds,
+    TRASH_DAYS: TRASH_DAYS, sanitizeTrash: sanitizeTrash, trashPhotoIds: trashPhotoIds, trashRestoreItem: trashRestoreItem
   };
 });

@@ -224,12 +224,21 @@
 
   /* ---------- small helpers ---------- */
   var toastTimer = null;
-  function toast(msg) {
+  function toast(msg, action) {
     var e = $('toast');
     e.textContent = msg;
+    e.classList.toggle('hasact', !!action);
+    if (action) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'toastact';
+      b.textContent = action.label;
+      b.addEventListener('click', function () { e.classList.remove('show'); clearTimeout(toastTimer); action.run(); });
+      e.appendChild(b);
+    }
     e.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { e.classList.remove('show'); }, 2600);
+    toastTimer = setTimeout(function () { e.classList.remove('show'); }, action ? 7000 : 2600);
   }
 
   function openModal(id) { $(id).classList.add('open'); }
@@ -291,7 +300,84 @@
       ids = ids.concat(p.photos);
       p.bills.forEach(function (b) { ids = ids.concat(b.photos); });
     });
+    ids = ids.concat(L.trashPhotoIds(state.trash));
     return ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+  }
+
+  /* ---------- Recently deleted (30 days) ---------- */
+  function clone(x) { return JSON.parse(JSON.stringify(x)); }
+  /* Put a removed item in the trash. Its photos stay on the phone until it is deleted for good. */
+  function trashPut(kind, label, payload, ctx, photos, noUndo) {
+    var rec = { id: L.newId(), kind: kind, label: String(label || '').slice(0, 120), deletedAt: Date.now(), payload: clone(payload), ctx: ctx || {}, photos: (photos || []).slice() };
+    state.trash = [rec].concat(state.trash || []).slice(0, 200);
+    if (!noUndo) pendingUndo = rec;
+    return rec;
+  }
+  var pendingUndo = null;
+  /* shows the "Deleted · Undo" message after save(); call once the screen is redrawn */
+  function undoToast() {
+    var rec = pendingUndo;
+    pendingUndo = null;
+    if (!rec) return;
+    toast(t('deleted_toast', { n: rec.label }), { label: t('undo'), run: function () { if (trashRestore(rec)) { save(); renderAll(); toast(t('restored_item')); } } });
+  }
+  function trashDrop(rec) {
+    state.trash = state.trash.filter(function (r) { return r.id !== rec.id; });
+    var keep = {};
+    L.trashPhotoIds(state.trash).concat(allPhotoIdsNoTrash()).forEach(function (id) { keep[id] = 1; });
+    deletePhotoIds((rec.photos || []).filter(function (id) { return !keep[id]; }));
+  }
+  function allPhotoIdsNoTrash() {
+    var ids = [];
+    state.books.forEach(function (b) { ids = ids.concat(entryPhotoIds(b.entries)); });
+    state.projects.forEach(function (p) { ids = ids.concat(p.photos); p.bills.forEach(function (b) { ids = ids.concat(b.photos); }); });
+    return ids;
+  }
+  /* returns true when the item is back; the caller saves and redraws */
+  function trashRestore(rec) {
+    var x = L.trashRestoreItem(rec), c = rec.ctx || {}, pr, i;
+    if (!x) { toast(t('restore_fail')); return false; }
+    function proj() { return state.projects.filter(function (q) { return q.id === c.projectId; })[0]; }
+    function freshId(list) { while (list.some(function (q) { return q.id === x.id; })) x.id = L.newId(); }
+    switch (rec.kind) {
+      case 'entry':
+        var bk = state.books.filter(function (b) { return b.id === c.bookId; })[0] || book();
+        freshId(bk.entries); bk.entries.push(x); break;
+      case 'boqrow':
+        pr = proj(); if (!pr) { toast(t('trash_no_parent')); return false; }
+        freshId(pr.boq); i = Math.min(Math.max(Number(c.index) || 0, 0), pr.boq.length); pr.boq.splice(i, 0, x); break;
+      case 'bill':
+        pr = proj(); if (!pr) { toast(t('trash_no_parent')); return false; }
+        freshId(pr.bills); pr.bills.push(x); break;
+      case 'cert':
+        pr = proj(); if (!pr) { toast(t('trash_no_parent')); return false; }
+        freshId(pr.certs); pr.certs.push(x); break;
+      case 'contact':
+        freshId(state.contacts); state.contacts.push(x); break;
+      case 'project':
+        while (state.projects.some(function (q) { return q.id === x.id; })) x.id = x.id + '_';
+        state.projects.push(x); break;
+      case 'book':
+        while (state.books.some(function (b) { return b.id === x.id; })) x.id = x.id + '_';
+        delete x.sync; delete x.nolink;
+        if (!state.projects.some(function (q) { return q.id === x.projectId; })) x.projectId = '';
+        if (!state.businesses.some(function (q) { return q.id === x.businessId; })) x.businessId = '';
+        state.books.push(x); break;
+    }
+    state.trash = state.trash.filter(function (r) { return r.id !== rec.id; });
+    return true;
+  }
+  /* photos of trash items that expired while the app was closed */
+  function purgeExpiredTrashPhotos() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (!raw || !Array.isArray(raw.trash)) return;
+      var gone = {};
+      raw.trash.forEach(function (r) { if (r && Array.isArray(r.photos) && Date.now() - Number(r.deletedAt) > L.TRASH_DAYS * 86400000) r.photos.forEach(function (id) { gone[id] = 1; }); });
+      var keep = {};
+      allPhotoIds().forEach(function (id) { keep[id] = 1; });
+      deletePhotoIds(Object.keys(gone).map(Number).filter(function (id) { return !keep[id]; }));
+    } catch (e) { /* ignore */ }
   }
 
   function viewPhoto(id, onRemove) {
@@ -870,11 +956,12 @@
     body.appendChild(btn(t('delete'), 'danger block', function () {
       if (!window.confirm(t('confirm_delete_project'))) return;
       state.books.forEach(function (b) { if (b.projectId === p.id) b.projectId = ''; });
-      deletePhotoIds(p.photos);
-      p.bills.forEach(function (b) { deletePhotoIds(b.photos); });
+      var pph = p.photos.slice();
+      p.bills.forEach(function (b) { pph = pph.concat(b.photos); });
+      trashPut('project', p.name, p, {}, pph);
       state.projects = state.projects.filter(function (x) { return x.id !== p.id; });
       ui.projectId = '';
-      save(); renderAll();
+      save(); renderAll(); undoToast();
     }));
   }
 
@@ -996,8 +1083,9 @@
     if (pos < p.boq.length - 1) items.push({ label: t('move_down'), run: function () { p.boq.splice(pos, 1); p.boq.splice(pos + 1, 0, it); save(); renderAll(); } });
     items.push({ label: t('delete'), danger: true, run: function () {
       if (!window.confirm(t('cf_delete_row', { name: title }))) return;
+      trashPut('boqrow', title, it, { projectId: p.id, index: pos });
       p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
-      save(); renderAll();
+      save(); renderAll(); undoToast();
     } });
     actionSheet(title, items);
   }
@@ -1055,8 +1143,9 @@
       },
       onDelete: isNew ? null : function () {
         if (!window.confirm(t('cf_delete_row', { name: (it.no ? it.no + ' ' : '') + it.desc }))) return false;
+        trashPut('boqrow', (it.no ? it.no + ' ' : '') + it.desc, it, { projectId: p.id, index: p.boq.indexOf(it) });
         p.boq = p.boq.filter(function (a) { return a.id !== it.id; });
-        save(); renderAll();
+        save(); renderAll(); undoToast();
         return true;
       }
     });
@@ -1257,10 +1346,10 @@
       },
       onDelete: isNew ? null : function () {
         if (!window.confirm(t('confirm_delete_bill'))) return false;
-        deletePhotoIds(bill.photos);
+        trashPut('bill', (bill.supplier || '') + ' ' + (bill.desc || ''), bill, { projectId: p.id }, bill.photos);
         clearEntryLinks('billId', bill.id);
         p.bills = p.bills.filter(function (x) { return x.id !== bill.id; });
-        save(); renderAll();
+        save(); renderAll(); undoToast();
         return true;
       }
     });
@@ -1403,9 +1492,10 @@
       },
       onDelete: isNew ? null : function () {
         if (!window.confirm(t('confirm_delete_cert'))) return false;
+        trashPut('cert', p.name + ' · ' + (cert.title || ('IPC ' + cert.no)), cert, { projectId: p.id });
         clearEntryLinks('certId', cert.id);
         p.certs = p.certs.filter(function (x) { return x.id !== cert.id; });
-        save(); renderAll();
+        save(); renderAll(); undoToast();
         return true;
       }
     });
@@ -1680,6 +1770,7 @@
     renderSettings();
     renderBiz();
     renderReminders();
+    renderBackupState();
     if (window.__renderCloud) window.__renderCloud();
   }
 
@@ -1893,13 +1984,16 @@
   $('deleteEntry').addEventListener('click', function () {
     if (!ui.editingId || !window.confirm(t('confirm_delete'))) return;
     var b = book();
+    var ent = b.entries.filter(function (x) { return x.id === ui.editingId; })[0];
     unlinkEntryEverywhere(ui.editingId);
-    deletePhotoIds(entryPhotoSt.ids.concat(entryPhotoSt.removed));
+    deletePhotoIds(entryPhotoSt.removed);
+    if (ent) trashPut('entry', (ent.category || ent.note || ent.party || '') + ' ' + money(ent.amount), ent, { bookId: b.id }, entryPhotoSt.ids);
     entryPhotoSt = newPhotoState([]);
     b.entries = b.entries.filter(function (x) { return x.id !== ui.editingId; });
     save();
     closeModal('entryModal');
     renderAll();
+    undoToast();
   });
 
   /* ---------- filters ---------- */
@@ -2003,10 +2097,11 @@
       },
       onDelete: isNew ? null : function () {
         if (!window.confirm(t('confirm_delete_contact'))) return false;
+        trashPut('contact', contact.name, contact, {});
         state.books.forEach(function (b) { b.entries.forEach(function (e) { if (e.contactId === contact.id) e.contactId = 0; }); });
         state.contacts = state.contacts.filter(function (x) { return x.id !== contact.id; });
         if (ui.contactId === contact.id) ui.contactId = 0;
-        save(); renderAll();
+        save(); renderAll(); undoToast();
         return true;
       }
     });
@@ -2295,7 +2390,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.7.0', APP_BUILD = 21;
+  var APP_VERSION = '2.8.0', APP_BUILD = 22;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
@@ -2326,13 +2421,14 @@
     function proceed() {
       var cur = book().id;
       dropPaymentsOfBook(cur);
-      deletePhotoIds(entryPhotoIds(book().entries));
+      trashPut('book', book().name, book(), {}, entryPhotoIds(book().entries));
       state.books = state.books.filter(function (b) { return b.id !== cur; });
       state.current = state.books[0].id;
       ui.bookOpen = false;
       save();
       closeModal('bookModal');
       renderAll();
+      undoToast();
     }
     if (book().sync && window.__cloudRelease) {          // also removes / leaves the online copy first
       window.__cloudRelease(book()).then(function (ok) { if (ok) proceed(); });
@@ -2357,10 +2453,11 @@
     if (!canEdit(book())) { toast(t('view_only_note')); return; }
     if (!window.confirm(t('confirm_clear'))) return;
     dropPaymentsOfBook(book().id);
-    deletePhotoIds(entryPhotoIds(book().entries));
+    if (book().entries.length) trashPut('book', book().name + ' (' + t('cleared') + ')', book(), {}, entryPhotoIds(book().entries));
     book().entries = [];
     save();
     renderAll();
+    undoToast();
   });
 
   /* ---------- PIN ---------- */
@@ -2417,7 +2514,7 @@
     if (window.AndroidBridge && typeof window.AndroidBridge.saveFile === 'function') {
       var where = window.AndroidBridge.saveFile(name, mime, content);
       toast(where ? t('saved') + ' ' + where : t('save_failed'));
-      return;
+      return !!where;
     }
     var blob = new Blob([content], { type: mime + ';charset=utf-8' });
     var url = URL.createObjectURL(blob);
@@ -2428,6 +2525,7 @@
     a.click();
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    return true;
   }
 
   /* binary files (.xlsx): Android gets base64, the browser a normal download */
@@ -2457,39 +2555,147 @@
     saveFile('cashbook-' + safeName(book().name) + '-' + L.todayStr() + '.csv', 'text/csv', L.buildCsv(book().entries));
   });
 
-  $('backupBtn').addEventListener('click', function () {
+  /* ---------- backup: one file with all data and photos ---------- */
+  var BACKUP_KEY = 'cashbook.backup.v1';   // when the last backup file was saved; never part of a backup
+  var PREREST_KEY = 'cashbook.prerestore.v1'; // the data that was on the phone before the last restore
+  function backupInfo() { try { return JSON.parse(localStorage.getItem(BACKUP_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function setBackupInfo(o) { try { localStorage.setItem(BACKUP_KEY, JSON.stringify(o)); } catch (e) { /* ignore */ } }
+  function dataCount() {
+    var n = 0;
+    state.books.forEach(function (b) { n += b.entries.length; });
+    return { entries: n, projects: state.projects.length, contacts: state.contacts.length };
+  }
+  function hasData() { var c = dataCount(); return c.entries + c.projects + c.contacts > 0; }
+
+  function buildBackup() {
     var copy = JSON.parse(JSON.stringify(state));
     copy.settings.pinHash = '';
     copy.settings.pinSalt = '';
-    saveFile('cashbook-backup-' + L.todayStr() + '.json', 'application/json', JSON.stringify(copy, null, 2));
-  });
-
-  $('backupPhotosBtn').addEventListener('click', function () {
+    copy.backupVersion = 2;
+    copy.savedAt = new Date().toISOString();
+    copy.photos = {};
     var ids = allPhotoIds();
-    if (!ids.length) { toast(t('photos_none')); return; }
-    Promise.all(ids.map(function (id) { return photoData(id).then(function (d) { return [id, d]; }); })).then(function (pairs) {
-      var photos = {}, n = 0;
-      pairs.forEach(function (x) { if (x[1]) { photos[x[0]] = x[1]; n++; } });
-      if (!n) { toast(t('photos_none')); return; }
-      saveFile('cashbook-photos-' + L.todayStr() + '.json', 'application/json', JSON.stringify({ cashbookPhotos: 1, photos: photos }));
+    return Promise.all(ids.map(function (id) {
+      return photoData(id).then(function (d) { return [id, d]; }, function () { return [id, null]; });
+    })).then(function (pairs) {
+      var n = 0;
+      pairs.forEach(function (x) { if (x[1]) { copy.photos[x[0]] = x[1]; n++; } });
+      return { text: JSON.stringify(copy), photos: n };
     });
-  });
+  }
+  function doBackup() {
+    return buildBackup().then(function (r) {
+      var ok = saveFile('cashbook-backup-' + L.todayStr() + '.json', 'application/json', r.text);
+      if (ok) {
+        var c = dataCount();
+        setBackupInfo({ last: Date.now(), entries: c.entries, projects: c.projects, photos: r.photos, snooze: 0 });
+        renderBackupState();
+      }
+      return ok;
+    });
+  }
+  $('backupBtn').addEventListener('click', function () { doBackup(); });
 
-  function restorePhotos(parsed) {
+  function renderBackupState() {
+    var info = backupInfo(), box = $('backupState');
+    if (box) {
+      if (info.last) {
+        box.textContent = t('last_backup', { d: fmtDate(new Date(info.last).toISOString().slice(0, 10)), e: info.entries || 0, p: info.projects || 0 });
+        box.className = 'muted small';
+      } else {
+        box.textContent = t('no_backup_yet');
+        box.className = 'small bkwarn';
+      }
+    }
+    var ban = $('backupBanner');
+    if (ban) {
+      var age = info.last ? (Date.now() - info.last) / 86400000 : 99;
+      var show = hasData() && age >= 7 && !(info.snooze && Date.now() < info.snooze);
+      ban.hidden = !show;
+      if (show) {
+        ban.textContent = '';
+        ban.appendChild(el('span', 'bktext', info.last ? t('backup_overdue', { n: Math.floor(age) }) : t('backup_never')));
+        var row = el('span', 'bkbtns');
+        row.appendChild(btn(t('backup_now'), 'primary', function () { doBackup(); }));
+        row.appendChild(btn(t('bk_later'), '', function () { var i = backupInfo(); i.snooze = Date.now() + 86400000; setBackupInfo(i); renderBackupState(); }));
+        ban.appendChild(row);
+      }
+    }
+    var pr = $('prerestoreBtn');
+    if (pr) { var has = false; try { has = !!localStorage.getItem(PREREST_KEY); } catch (e) { /* ignore */ } pr.hidden = !has; }
+    var tb = $('trashBtn');
+    if (tb) tb.textContent = t('recently_deleted') + ' (' + (state.trash || []).length + ')';
+  }
+
+  /* put photos from a backup on the phone */
+  function putPhotos(parsed) {
     var ids = Object.keys(parsed.photos || {}).filter(function (id) {
       var d = parsed.photos[id];
       return /^\d{1,16}$/.test(id) && typeof d === 'string' && d.indexOf('data:image/') === 0 && d.length < 4000000;
     });
     var n = 0;
-    ids.reduce(function (chain, id) {
+    return ids.reduce(function (chain, id) {
       return chain.then(function () {
         return window.CBPhotos.put(id, parsed.photos[id]).then(function () { photoCache[Number(id)] = parsed.photos[id]; n++; }).catch(function () { /* skip */ });
       });
-    }, Promise.resolve()).then(function () {
+    }, Promise.resolve()).then(function () { return n; });
+  }
+  function restorePhotos(parsed) {
+    putPhotos(parsed).then(function (n) {
       renderAll();
       toast(n ? t('photos_restored', { n: n }) : t('restore_fail'));
     });
   }
+
+  /* Recently deleted */
+  function openTrash() {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal');
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    function draw() {
+      m.textContent = '';
+      m.appendChild(el('h2', null, t('recently_deleted')));
+      m.appendChild(el('p', 'muted small', t('trash_note')));
+      if (!state.trash.length) m.appendChild(el('p', 'muted', t('trash_empty')));
+      state.trash.forEach(function (rec) {
+        var left = Math.max(0, L.TRASH_DAYS - Math.floor((Date.now() - rec.deletedAt) / 86400000));
+        var row = el('div', 'trashrow');
+        var tx = el('span', 'stext');
+        tx.appendChild(el('b', null, rec.label || '—'));
+        tx.appendChild(el('small', 'muted', t('trash_kind_' + rec.kind) + ' · ' + t('trash_days_left', { n: left })));
+        row.appendChild(tx);
+        row.appendChild(btn(t('restore_item'), 'primary', function () {
+          if (trashRestore(rec)) { save(); renderAll(); toast(t('restored_item')); draw(); }
+        }));
+        row.appendChild(btn('✕', 'danger', function () {
+          if (!window.confirm(t('trash_forever', { name: rec.label || '—' }))) return;
+          trashDrop(rec); save(); renderBackupState(); draw();
+        }));
+        m.appendChild(row);
+      });
+      m.appendChild(btn(t('close'), 'block', close));
+    }
+    draw();
+    ov.appendChild(m);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.body.appendChild(ov);
+  }
+  $('trashBtn').addEventListener('click', openTrash);
+
+  /* undo a restore: the previous data was kept on the phone */
+  $('prerestoreBtn').addEventListener('click', function () {
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem(PREREST_KEY) || 'null'); } catch (e) { /* ignore */ }
+    if (!raw || !Array.isArray(raw.books)) { toast(t('restore_fail')); return; }
+    if (!window.confirm(t('prerestore_confirm'))) return;
+    var next = L.sanitizeState(raw, { keepPin: false });
+    next.settings.pinHash = state.settings.pinHash;
+    next.settings.pinSalt = state.settings.pinSalt;
+    state = next;
+    ui.projectId = '';
+    try { localStorage.removeItem(PREREST_KEY); } catch (e) { /* ignore */ }
+    save(); renderAll();
+    toast(t('restored'));
+  });
 
   $('restoreBtn').addEventListener('click', function () { $('restoreFile').click(); });
 
@@ -2508,6 +2714,7 @@
           if (parsed && parsed.cashbookPhotos) { restorePhotos(parsed); return; }
           if (!parsed || !Array.isArray(parsed.books)) throw new Error('not a backup');
           if (!window.confirm(t('restore_confirm'))) return;
+          try { localStorage.setItem(PREREST_KEY, JSON.stringify(state)); } catch (e2) { /* too big: restore still works */ }
           var next = L.sanitizeState(parsed, { keepPin: false });
           next.settings.pinHash = state.settings.pinHash;
           next.settings.pinSalt = state.settings.pinSalt;
@@ -2517,6 +2724,7 @@
           save();
           renderAll();
           toast(t('restored'));
+          if (parsed.photos && typeof parsed.photos === 'object') putPhotos(parsed).then(function () { renderAll(); });
         } else {
           var res = L.entriesFromCsv(text);
           if (!res.entries.length) throw new Error('no rows');
@@ -3035,10 +3243,10 @@
       if (state.books.length < 2) { toast(t('last_book')); return; }
       function proceed() {
         dropPaymentsOfBook(b.id);
-        deletePhotoIds(entryPhotoIds(b.entries));
+        trashPut('book', b.name, b, {}, entryPhotoIds(b.entries));
         state.books = state.books.filter(function (x) { return x.id !== b.id; });
         if (state.current === b.id) state.current = state.books[0].id;
-        save(); renderAll();
+        save(); renderAll(); undoToast();
       }
       if (b.sync && window.__cloudRelease) { window.__cloudRelease(b).then(function (ok) { if (ok) proceed(); }); return; }
       if (window.confirm(t('confirm_delete_book'))) proceed();
@@ -3119,6 +3327,7 @@
   /* ---------- start ---------- */
   touchBooks();                      // remember how each book looks now, so only later changes count as an update
   showView('entries');
+  purgeExpiredTrashPhotos();
   renderAll();
   showLock();
 })();

@@ -3,6 +3,18 @@
 (function () {
   var add = {
     en: {
+      about_new_8: 'One backup file with data and photos, a 7-day backup reminder, and Recently deleted (30 days, with Undo)',
+      deleted_toast: 'Deleted “{n}”', undo: 'Undo', restored_item: 'Restored', cleared: 'cleared', recently_deleted: 'Recently deleted',
+      trash_note: 'Deleted items stay here for 30 days. Restore them, or delete them for good.', trash_empty: 'Nothing deleted recently.',
+      trash_days_left: '{n} days left', restore_item: 'Restore', trash_forever: 'Delete “{name}” for good? It cannot be restored afterwards.',
+      trash_no_parent: 'Restore the project first, then this item.', trash_kind_entry: 'Entry', trash_kind_boqrow: 'BoQ row', trash_kind_bill: 'Bill',
+      trash_kind_cert: 'Certificate', trash_kind_contact: 'Contact', trash_kind_project: 'Project', trash_kind_book: 'Book',
+      last_backup: 'Last backup: {d} ({e} entries, {p} projects)', no_backup_yet: 'No backup yet. Back up now so your work is safe.',
+      backup_overdue: 'Your last backup was {n} days ago. Save a backup file.', backup_never: 'You have no backup yet. Save one now.',
+      backup_now: 'Back up now', bk_later: 'Later', prerestore: 'Undo last restore',
+      prerestore_confirm: 'Go back to the data you had before the last restore?',
+      backup: 'Back up everything (data + photos)', restore: 'Restore from a backup file',
+      photos_note: 'The backup file contains all your data and photos. Keep it safe, for example send it to yourself on WhatsApp or email, then use “Restore from a backup file” on a new phone.',
       advance_pct: 'Advance payment received (% of contract)', recovery_pct: 'Advance repayment %', cash_received: 'Cash received', vat_wht_pct: 'VAT withheld (% of VAT)', work_incl_vat: 'Work including VAT', penalty: 'Penalty', pay_to_contractor: 'Payment to contractor', vat_wht_amt: 'VAT withheld', of_vat: 'of VAT', cash_due: 'Cash to receive', wht_receipt: 'Withholding receipt no.', vat_wht_receipt: 'VAT withholding receipt no.', receipt_missing: 'receipt missing', tax_receipts: 'Tax receipts', adv_auto: 'Automatic', adv_manual: 'Enter amount', adv_manual_amount: 'Advance repayment amount', contract_incl_vat: 'Contract sum incl. VAT', your_books: 'Your Books', tap_switch_biz: 'Tap to switch business', add_new_book: 'Add New Book', add_new_book_sub: 'Click to quickly add books', search_books: 'Search books', no_books_found: 'No books found.', updated_on: 'Updated on', no_entries_short: 'No entries yet', my_books: 'My books', sort_updated: 'Last updated', sort_name: 'Name', sort_balance: 'Balance', m_rename: 'Rename', m_export: 'Export (CSV)', m_share: 'Share with people', m_project: 'Link to a project', m_business: 'Move to a business', m_delete: 'Delete book', book_name: 'Book name', switch_business: 'Switch business', pick_business_first: 'Pick a business first', staff: 'Staff', back: 'Back', from_phonebook: '📱 From phone book', phonebook_opt: '📱 From phone book…', more_filters: 'More filters (contact, mode, member, category)', contacts: 'Contacts', contact: 'Contact', add_contact: 'Add contact', edit_contact: 'Edit contact', search_contacts: 'Search name or phone',
       no_contacts: 'No contacts yet. Add customers and suppliers, then pick them on entries.', no_contact_opt: 'No contact', new_contact_opt: '➕ New contact…',
       all_contacts: 'All contacts', all_kinds: 'All types', kind_customer: 'Customer', kind_supplier: 'Supplier', kind_other: 'Other',

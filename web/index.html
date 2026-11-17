@@ -34,6 +34,7 @@
     <section id="view-entries" class="view">
       <div id="booksHome">
         <button type="button" id="remindBanner" class="remind" hidden></button>
+        <div id="backupBanner" class="bkbanner" hidden></div>
         <div class="bizbar">
           <button type="button" id="bizBar" class="bizcard">
             <span class="bizicon" aria-hidden="true">🏢</span>
@@ -201,9 +202,11 @@
 
       <div class="panel">
         <h2 data-i18n="data">Data</h2>
-        <button type="button" id="backupBtn" class="block" data-i18n="backup">Backup all data</button>
-        <button type="button" id="backupPhotosBtn" class="block" data-i18n="backup_photos">Backup photos</button>
+        <p id="backupState" class="muted small"></p>
+        <button type="button" id="backupBtn" class="block primary" data-i18n="backup">Backup all data</button>
         <button type="button" id="restoreBtn" class="block" data-i18n="restore">Restore from file</button>
+        <button type="button" id="prerestoreBtn" class="block" data-i18n="prerestore" hidden>Undo last restore</button>
+        <button type="button" id="trashBtn" class="block">Recently deleted</button>
         <input type="file" id="boqFile" accept=".csv,text/csv,text/plain" hidden>
         <input type="file" id="restoreFile" accept=".json,.csv,application/json,text/csv,text/plain" hidden>
         <button type="button" id="exportBtn" class="block" data-i18n="export_csv">Export this book (CSV)</button>
@@ -287,6 +290,7 @@
       <details class="aboutsec" open>
         <summary data-i18n="about_new_title">What’s new</summary>
         <ul>
+          <li data-i18n="about_new_8">One backup file with data and photos, a 7-day backup reminder, and Recently deleted (30 days, with Undo)</li>
           <li data-i18n="about_new_1">Summary lines and group titles in the BoQ build the Summary sheet</li>
           <li data-i18n="about_new_2">Variation Order per certificate with its own Excel sheet</li>
           <li data-i18n="about_new_3">Due from client counts tax once receipts are entered</li>
