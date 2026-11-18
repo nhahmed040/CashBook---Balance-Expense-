@@ -893,6 +893,110 @@
     });
   }
 
+  /* Monthly progress: enter this period's quantities for every BoQ item on one screen */
+  function openProgress(p) {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal importmodal progmodal');
+    var items = p.boq.filter(L.isItemRow);
+    var title = '', rows = [], vals = {}, onlyWork = false, filter = '';
+    var head = null;
+    p.boq.forEach(function (it) {
+      if (L.isGroupRow(it) || L.isLineRow(it)) head = it.desc;
+      else if (L.isItemRow(it)) rows.push({ it: it, head: head });
+    });
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    var summaryBox = el('div', 'panel'), listBox = el('div', 'importlist progList');
+    function todayVal(it) { var v = vals[it.id]; return v == null || v === '' || isNaN(v) ? 0 : Number(v); }
+    function totals() {
+      var period = 0, toDate = 0, total = 0;
+      rows.forEach(function (r) { period += todayVal(r.it) * r.it.rate; toDate += (r.it.done + todayVal(r.it)) * r.it.rate; total += r.it.qty * r.it.rate; });
+      var certified = L.round2(p.certs.reduce(function (a, c) { return a + c.gross; }, 0));
+      return { period: L.round2(period), toDate: L.round2(toDate), total: L.round2(total), certified: certified };
+    }
+    function drawSummary() {
+      var T = totals();
+      summaryBox.textContent = '';
+      summaryBox.appendChild(kv(t('pg_total'), money(T.total)));
+      summaryBox.appendChild(kv(t('pg_certified'), money(T.certified)));
+      summaryBox.appendChild(kv(t('pg_period'), money(T.period), T.period > 0 ? 'pos' : ''));
+      summaryBox.appendChild(kv(t('pg_todate'), money(T.toDate) + (T.total > 0 ? ' (' + L.round2(T.toDate / T.total * 100) + '%)' : '')));
+      summaryBox.appendChild(kv(t('pg_uncertified'), money(L.round2(T.toDate - T.certified)), T.toDate - T.certified < -0.005 ? 'neg' : ''));
+      summaryBox.appendChild(kv(t('pg_left'), money(L.round2(T.total - T.toDate))));
+    }
+    function drawRows() {
+      listBox.textContent = '';
+      var last = null, shown = 0, q = filter.trim().toLowerCase();
+      rows.forEach(function (r) {
+        var it = r.it;
+        if (q && (it.no + ' ' + it.desc).toLowerCase().indexOf(q) < 0) return;
+        if (onlyWork && !todayVal(it)) return;
+        if (r.head !== last) { last = r.head; if (r.head) listBox.appendChild(el('div', 'progHead', r.head)); }
+        var row = el('div', 'improw progRow');
+        var tx = el('span', 'stext');
+        tx.appendChild(el('b', null, (it.no ? it.no + ' ' : '') + it.desc));
+        var info = el('small', 'muted', '');
+        tx.appendChild(info);
+        row.appendChild(tx);
+        var box = el('span', 'progIn');
+        var inp = document.createElement('input');
+        inp.type = 'number'; inp.step = 'any'; inp.min = '0'; inp.inputMode = 'decimal'; inp.placeholder = '0';
+        inp.value = vals[it.id] != null && vals[it.id] !== '' ? vals[it.id] : '';
+        var warn = el('small', 'neg', '');
+        function upd() {
+          var v = todayVal(it), cum = L.round2(it.done + v), pct = it.qty > 0 ? Math.round(cum / it.qty * 100) : 0;
+          info.textContent = it.unit + ' · BoQ ' + it.qty + ' · ' + t('pg_prev') + ' ' + it.done + ' → ' + cum + ' (' + pct + '%)';
+          warn.textContent = cum > it.qty + 1e-9 ? t('pg_exceeds', { n: L.round2(cum - it.qty) }) : '';
+        }
+        inp.addEventListener('input', function () { vals[it.id] = inp.value === '' ? '' : parseFloat(inp.value); upd(); drawSummary(); });
+        var rest = L.round2(Math.max(0, it.qty - it.done));
+        var fin = btn('100%', 'progfin', function () { vals[it.id] = rest; inp.value = rest || ''; upd(); drawSummary(); });
+        box.appendChild(inp); box.appendChild(fin);
+        row.appendChild(box);
+        tx.appendChild(warn);
+        upd();
+        listBox.appendChild(row);
+        shown++;
+      });
+      if (!shown) listBox.appendChild(el('p', 'muted small', t('no_data')));
+    }
+    function apply() {
+      var n = 0;
+      rows.forEach(function (r) {
+        var v = todayVal(r.it);
+        if (v) { r.it.done = L.round2(r.it.done + v); n++; }
+      });
+      return n;
+    }
+    m.appendChild(el('h2', null, t('progress_btn')));
+    m.appendChild(el('p', 'muted small', t('pg_note')));
+    var search = document.createElement('input');
+    search.type = 'search'; search.placeholder = t('search_boq');
+    search.addEventListener('input', function () { filter = search.value; drawRows(); });
+    m.appendChild(search);
+    var lab = el('label', 'check'), cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.addEventListener('change', function () { onlyWork = cb.checked; drawRows(); });
+    lab.appendChild(cb); lab.appendChild(el('span', null, ' ' + t('pg_only_work')));
+    m.appendChild(lab);
+    m.appendChild(summaryBox); m.appendChild(listBox);
+    m.appendChild(btn(t('pg_save'), 'block', function () {
+      var n = apply();
+      if (!n) { toast(t('pg_none')); return; }
+      save(); renderAll(); close(); toast(t('pg_saved', { n: n }));
+    }));
+    m.appendChild(btn(t('pg_save_cert'), 'block primary', function () {
+      var n = apply();
+      if (n) { save(); }
+      var proposed = L.proposeCertGross(p);
+      close();
+      if (proposed <= 0) { renderAll(); toast(t('nothing_to_certify')); return; }
+      ui.section = 'client'; renderProjects();
+      editCert(p, null, { gross: proposed });
+    }));
+    m.appendChild(btn(t('cancel'), 'block', close));
+    ov.appendChild(m);
+    document.body.appendChild(ov);
+    drawSummary(); drawRows();
+  }
+
   /* Cash forecast: what should come in and what must go out */
   function openForecast() {
     var f = L.cashForecast(state, L.todayStr(), 30), T = f.totals;
@@ -1060,6 +1164,7 @@
     if (differs && p.contractSum > 0) pn.appendChild(kv(t('boq_vs_contract'), money(L.round2(s.total - p.contractSum)), 'neg'));
     body.appendChild(pn);
 
+    if (p.boq.some(function (i) { return L.isItemRow(i); })) body.appendChild(btn('📏 ' + t('progress_btn'), 'block', function () { openProgress(p); }));
     body.appendChild(btn(t('cert_from_progress'), 'primary block', function () {
       var proposed = L.proposeCertGross(p);
       if (s.total <= 0 || proposed <= 0) { toast(t('nothing_to_certify')); return; }
@@ -2582,7 +2687,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.13.0', APP_BUILD = 28;
+  var APP_VERSION = '2.14.0', APP_BUILD = 29;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

@@ -571,3 +571,12 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .calcgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
 .calckey { min-height: 52px; font-size: 1.25rem; font-weight: 600; }
 .calckey.op { background: var(--accent-soft); }
+
+/* progress screen */
+.progList { max-height: 46vh; }
+.progHead { padding: 6px 8px; font-weight: 700; background: rgba(90,79,240,.10); position: sticky; top: 0; font-size: .85rem; }
+.progRow { align-items: center; }
+.progRow .stext { flex: 1; }
+.progIn { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+.progIn input { width: 78px; text-align: right; padding: 8px; }
+.progfin { min-height: 0; padding: 6px 8px; font-size: .8rem; }
