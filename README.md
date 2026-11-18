@@ -215,3 +215,7 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 - **Afaan Oromoo and Amharic** for every screen added since 2.3 (cloud sync, sharing, certificates, BoQ import, progress, forecast, profit, diary, statements, search). Please have a native speaker review the wording.
 - **First-time guide** on a fresh install (also under About → Show the quick guide).
 - **Weekly worker pay reminder**: unpaid attendance shows in Reminders; it turns urgent once the oldest unpaid day is 7 days old.
+
+## 2.18.0
+
+- **Cost control per BoQ section**: bills and cash-out entries (in books linked to a project) can be tagged to a BoQ section (a summary line such as "1. Excavation", or a group heading when the BoQ has no summary lines). The Overview profit panel shows cost against the contract value of each section, with a warning when a section is over. Costs not tagged to a section are listed separately.

@@ -93,6 +93,7 @@
       party: str(e.party, 60),
       billId: validId(e.billId) ? e.billId : 0,
       certId: validId(e.certId) ? e.certId : 0,
+      sec: validId(e.sec) ? e.sec : 0,
       photos: photoIds(e.photos),
       mode: MODES.indexOf(e.mode) >= 0 ? e.mode : '',
       by: str(e.by, 40),
@@ -154,6 +155,7 @@
       code: CODES.indexOf(b.code) >= 0 ? b.code : 'other',
       desc: str(b.desc, 80),
       due: isDate(b.due) ? b.due : '',
+      sec: validId(b.sec) ? b.sec : 0,
       amount: round2(a),
       payments: mapList(b.payments, sanitizePayment, 500),
       photos: photoIds(b.photos)
@@ -1368,6 +1370,34 @@
     return out;
   }
 
+  /* ---------- cost control per BoQ section ---------- */
+  /* A section starts at a summary line (or, with none, a group heading) and runs to the next one.
+     Its budget is the contract value of the items under it. */
+  function costSections(project) {
+    var kind = project.boq.some(function (i) { return i.kind === 'line'; }) ? 'line' : 'group';
+    var out = [], cur = null;
+    project.boq.forEach(function (i) {
+      if (i.kind === kind) { cur = { id: i.id, label: ((i.no ? i.no + ' ' : '') + i.desc).trim(), budget: 0 }; out.push(cur); }
+      else if (cur && !isHeading(i) && !isSumRow(i)) cur.budget = round2(cur.budget + i.qty * i.rate);
+    });
+    return out;
+  }
+  /* Cost booked against each section (bills, plus cash-out entries not already counted through a bill). */
+  function costBySection(state, projectId) {
+    var p = null;
+    state.projects.forEach(function (x) { if (x.id === projectId) p = x; });
+    if (!p) return null;
+    var secs = costSections(p), map = {}, untagged = 0;
+    secs.forEach(function (s) { s.cost = 0; map[s.id] = s; });
+    function add(sec, amount) { if (map[sec]) map[sec].cost = round2(map[sec].cost + amount); else untagged = round2(untagged + amount); }
+    p.bills.forEach(function (b) { add(b.sec, b.amount); });
+    projectBooks(state, projectId).forEach(function (bk) {
+      bk.entries.forEach(function (e) { if (e.type === 'out' && !e.billId) add(e.sec, e.amount); });
+    });
+    secs.forEach(function (s) { s.pct = s.budget > 0 ? round2(s.cost / s.budget * 100) : 0; s.over = s.budget > 0 && s.cost > s.budget; });
+    return { sections: secs.filter(function (s) { return s.cost > 0 || s.budget > 0; }), untagged: untagged };
+  }
+
   /* ---------- statements ---------- */
   /* All bills and payments of one supplier, oldest first, with a running balance (what you owe). */
   function supplierStatement(project, supplier) {
@@ -1470,7 +1500,7 @@
   }
 
   return {
-    rowsToCsv: rowsToCsv, supplierStatement: supplierStatement, supplierNames: supplierNames, workerStatement: workerStatement, diaryRange: diaryRange, searchAll: searchAll, sanitizeDiary: sanitizeDiary, WEATHER: WEATHER,
+    costSections: costSections, costBySection: costBySection, rowsToCsv: rowsToCsv, supplierStatement: supplierStatement, supplierNames: supplierNames, workerStatement: workerStatement, diaryRange: diaryRange, searchAll: searchAll, sanitizeDiary: sanitizeDiary, WEATHER: WEATHER,
     cashForecast: cashForecast, profitOutlook: profitOutlook,
     calcEval: calcEval,
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,

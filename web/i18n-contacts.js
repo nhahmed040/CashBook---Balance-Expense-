@@ -3,6 +3,7 @@
 (function () {
   var add = {
     en: {
+      boq_section: 'BoQ section', pf_sections: 'Cost against each BoQ section (cost / contract value)', pf_untagged: 'Not tagged to a section',
       cn_wages: 'Oldest unpaid day was {n} days ago', guide_title: 'Welcome to CashBook', guide_1: '📒 Cash books: record cash in and cash out. Tap + on any book. Tap a recent category to add fast. 🧮 helps you calculate.', guide_2: '🏗️ Projects: BoQ, progress, payment certificates, bills, workers and the site diary for each job.', guide_3: '📸 Add photos of receipts with the camera. 🔍 finds anything fast.', guide_4: '💾 Back up often (Settings → Backup all data). Deleted things stay 30 days in Recently deleted.', guide_ok: 'Start', guide_show: 'Show the quick guide',
       diary: 'Diary', diary_add: 'Add diary entry', diary_empty: 'No diary entries yet. Write what happened on site today.', diary_weather: 'Weather', diary_workers: 'Workers on site', diary_workers_short: 'workers', diary_work: 'Work done', diary_problems: 'Problems / delays', diary_visitors: 'Visitors / inspections', diary_report: 'Progress report', diary_confirm_delete: 'Delete this diary entry?',
       wx_sunny: 'Sunny', wx_cloudy: 'Cloudy', wx_rain: 'Rain', wx_windy: 'Windy', wx_hot: 'Very hot',

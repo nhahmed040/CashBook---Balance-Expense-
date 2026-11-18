@@ -1336,6 +1336,14 @@
         pp.appendChild(kv(codeLabel(x.code) + ' (' + x.pct + '%)', money(x.amount) + (x.over ? ' ⚠' : ''), x.over ? 'neg' : ''));
       });
     }
+    var cs = L.costBySection(state, p.id);
+    if (cs && cs.sections.length) {
+      pp.appendChild(el('h3', null, t('pf_sections')));
+      cs.sections.forEach(function (s) {
+        pp.appendChild(kv(s.label.slice(0, 40) + (s.budget > 0 ? ' (' + s.pct + '%)' : ''), money(s.cost) + (s.budget > 0 ? ' / ' + money(s.budget) : '') + (s.over ? ' ⚠' : ''), s.over ? 'neg' : ''));
+      });
+      if (cs.untagged > 0) pp.appendChild(kv(t('pf_untagged'), money(cs.untagged)));
+    }
     pp.appendChild(el('p', 'note', t('pf_note')));
     body.appendChild(pp);
 
@@ -1808,20 +1816,21 @@
       fields: [
         { key: 'date', label: t('date'), type: 'date', value: b.date, required: true },
         { key: 'supplier', label: t('supplier'), type: 'text', value: b.supplier, required: true },
-        { key: 'code', label: t('cost_code'), type: 'select', options: codeOptions(), value: b.code },
+        { key: 'code', label: t('cost_code'), type: 'select', options: codeOptions(), value: b.code }
+      ].concat(L.costSections(p).length ? [{ key: 'sec', label: t('boq_section'), type: 'select', options: [{ value: '', label: t('none_opt') }].concat(L.costSections(p).map(function (s) { return { value: String(s.id), label: s.label.slice(0, 60) }; })), value: b.sec ? String(b.sec) : '' }] : []).concat([
         { key: 'desc', label: t('description'), type: 'text', value: b.desc, max: 80 },
         { key: 'amount', label: t('bill_amount'), type: 'number', min: 0.01, value: b.amount, required: true },
         { key: 'due', label: t('due_date'), type: 'date', value: b.due || '' },
         { key: 'photos', type: 'photos', state: pst }
-      ],
+      ]),
       onSubmit: function (v) {
         var date = L.isDate(v.date) ? v.date : L.todayStr();
         if (isNew) {
-          var nb = L.sanitizeBill({ date: date, supplier: v.supplier, code: v.code, desc: v.desc, amount: v.amount, due: v.due, photos: pst.ids });
+          var nb = L.sanitizeBill({ date: date, supplier: v.supplier, sec: Number(v.sec) || 0, code: v.code, desc: v.desc, amount: v.amount, due: v.due, photos: pst.ids });
           if (!nb) return t('required');
           p.bills.push(nb);
         } else {
-          bill.date = date; bill.supplier = v.supplier.slice(0, 60); bill.code = v.code; bill.desc = v.desc.slice(0, 80);
+          bill.date = date; bill.supplier = v.supplier.slice(0, 60); bill.code = v.code; bill.sec = Number(v.sec) || 0; bill.desc = v.desc.slice(0, 80);
           bill.amount = L.round2(v.amount);
           bill.due = L.isDate(v.due) ? v.due : '';
           bill.photos = L.photoIds(pst.ids);
@@ -2345,6 +2354,7 @@
     entryLinkOptions(proj, type, editingEntry).forEach(function (o) { sel.appendChild(o); });
     sel.value = keep && sel.querySelector('option[value="' + keep + '"]') ? keep : '';
     $('codeSel').parentNode.hidden = type !== 'out';
+    $('secField').hidden = type !== 'out' || $('secSel').options.length < 2;
   }
 
   function openEntry(id) {
@@ -2387,6 +2397,14 @@
       cs.appendChild(option('', t('none_opt')));
       L.CODES.forEach(function (c) { cs.appendChild(option(c, codeLabel(c))); });
       cs.value = e ? e.code : '';
+      var ss = $('secSel');
+      ss.textContent = '';
+      var secs = L.costSections(proj);
+      if (secs.length) {
+        ss.appendChild(option('', t('none_opt')));
+        secs.forEach(function (s) { ss.appendChild(option(String(s.id), s.label.slice(0, 60))); });
+      }
+      ss.value = e && e.sec ? String(e.sec) : '';
       $('party').value = e ? e.party : '';
       var pl = $('partyList');
       pl.textContent = '';
@@ -2434,6 +2452,7 @@
       var bill = byId(proj.bills, id);
       if (!bill) return;
       $('codeSel').value = bill.code;
+      if (bill.sec && $('secSel').querySelector('option[value="' + bill.sec + '"]')) $('secSel').value = String(bill.sec);
       $('party').value = bill.supplier;
       if (!$('amount').value) $('amount').value = Math.max(0, L.billBalance(bill));
       if (!$('category').value) $('category').value = bill.desc || codeLabel(bill.code);
@@ -2455,15 +2474,16 @@
     var prev = editingEntry;
 
     var code = prev ? prev.code : '', party = prev ? prev.party : '';
-    var billId = prev ? prev.billId : 0, certId = prev ? prev.certId : 0;
+    var billId = prev ? prev.billId : 0, certId = prev ? prev.certId : 0, sec = prev ? prev.sec : 0;
     if (proj) {
       code = type === 'out' ? $('codeSel').value : '';
+      sec = type === 'out' ? Number($('secSel').value) || 0 : 0;
       party = $('party').value;
       var linkVal = Number($('linkSel').value) || 0;
       billId = type === 'out' ? linkVal : 0;
       certId = type === 'in' ? linkVal : 0;
     } else if (prev && prev.type !== type) {
-      code = ''; billId = 0; certId = 0;
+      code = ''; billId = 0; certId = 0; sec = 0;
     }
 
     var contactId = Number($('contactSel').value) || 0;
@@ -2477,7 +2497,7 @@
       date: $('date').value,
       category: $('category').value,
       note: $('note').value,
-      code: code, party: party, billId: billId, certId: certId, photos: entryPhotoSt.ids
+      code: code, sec: sec, party: party, billId: billId, certId: certId, photos: entryPhotoSt.ids
     });
     if (!draft) return;
 
@@ -2913,7 +2933,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.17.0', APP_BUILD = 32;
+  var APP_VERSION = '2.18.0', APP_BUILD = 33;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
