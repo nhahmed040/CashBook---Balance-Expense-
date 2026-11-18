@@ -96,6 +96,12 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Certificate status and follow-up (2.10)
+
+- Every certificate has a status chip: **Draft → Submitted → Approved → Paid**. Tap **Change status** and enter the date. Certificates without a status are shown as Paid when fully received, otherwise Draft.
+- Reminders (home and project screens): a submitted certificate not approved after 14 days, or an approved one not paid after 21 days, turns red. A draft older than 7 days is listed as a gentle reminder. Paid certificates never remind.
+- The red banner now says "bills or certificates need follow-up".
+
 ## Import the BoQ from Excel (2.9)
 
 - On a project's BoQ tab, **Import BoQ (Excel or CSV)** reads an `.xlsx` file directly (no CSV conversion).

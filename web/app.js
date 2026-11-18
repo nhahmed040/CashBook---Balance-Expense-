@@ -1486,6 +1486,13 @@
       var card = panel(null);
       card.appendChild(el('h3', null, cert.no || t('client')));
       card.appendChild(el('div', 'muted small', fmtDate(cert.date)));
+      var stKey = L.certStatus(cert, c);
+      var stRow = el('div', 'statusrow');
+      stRow.appendChild(el('span', 'statuschip st-' + stKey, t('cs_' + stKey)));
+      var stDate = stKey === 'submitted' ? cert.sentDate : stKey === 'approved' ? cert.approvedDate : stKey === 'paid' ? cert.paidDate : '';
+      if (stDate) stRow.appendChild(el('small', 'muted', fmtDate(stDate)));
+      stRow.appendChild(btn(t('cs_change'), '', function () { changeCertStatus(p, cert); }));
+      card.appendChild(stRow);
       if (c.variation > 0) {
         card.appendChild(kv(t('work_excl_var'), money(c.work)));
         card.appendChild(kv('+ ' + t('variation_orders'), money(c.variation)));
@@ -1529,6 +1536,34 @@
       row.appendChild(btn(t('edit_cert'), '', function () { editCert(p, cert); }));
       card.appendChild(row);
       body.appendChild(card);
+    });
+  }
+
+  function changeCertStatus(p, cert) {
+    var cur = L.certStatus(cert, L.certCalc(p, cert));
+    actionSheet(t('cs_change') + ' – ' + (cert.no || ''), L.CERT_STATUSES.map(function (k) {
+      return { label: (k === cur ? '✓ ' : '') + t('cs_' + k), run: function () { setCertStatus(p, cert, k); } };
+    }));
+  }
+  function setCertStatus(p, cert, k) {
+    var field = { submitted: 'sentDate', approved: 'approvedDate', paid: 'paidDate' }[k];
+    if (!field) {
+      cert.status = 'draft'; cert.sentDate = ''; cert.approvedDate = ''; cert.paidDate = '';
+      save(); renderAll(); return;
+    }
+    openForm({
+      title: t('cs_' + k) + ' – ' + (cert.no || ''),
+      fields: [{ key: 'date', label: t('cs_date_' + k), type: 'date', value: cert[field] || L.todayStr(), required: true }],
+      onSubmit: function (v) {
+        cert.status = k;
+        cert[field] = v.date;
+        if (k === 'draft' || k === 'submitted') { cert.approvedDate = ''; cert.paidDate = ''; }
+        if (k === 'approved') cert.paidDate = '';
+        if (k !== 'draft' && !cert.sentDate) cert.sentDate = v.date;
+        if (k === 'paid' && !cert.approvedDate) cert.approvedDate = v.date;
+        save(); renderAll();
+        return null;
+      }
     });
   }
 
@@ -2341,7 +2376,8 @@
       row.type = 'button';
       var tx = el('span', 'stext');
       tx.appendChild(el('b', null, (r.kind === 'cert' ? t('unpaid_cert') + ': ' : '') + (r.who || '—')));
-      tx.appendChild(el('small', 'muted', [r.project, r.desc, r.due ? t('due_label') + ' ' + fmtDate(r.due) : ''].filter(Boolean).join(' · ')));
+      var cnote = r.note ? t('cn_' + r.note.split(':')[0], { n: r.note.split(':')[1] }) : '';
+      tx.appendChild(el('small', 'muted', [r.project, r.desc, cnote, r.due ? t('due_label') + ' ' + fmtDate(r.due) : ''].filter(Boolean).join(' · ')));
       row.appendChild(tx);
       row.appendChild(el('span', 'amt ' + (r.level === 'overdue' ? 'out' : ''), money(r.amount)));
       row.addEventListener('click', function () { ui.projectId = r.projectId; ui.section = r.kind === 'cert' ? 'client' : 'bills'; renderProjects(); window.scrollTo(0, 0); });
@@ -2464,7 +2500,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.9.1', APP_BUILD = 24;
+  var APP_VERSION = '2.10.0', APP_BUILD = 25;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

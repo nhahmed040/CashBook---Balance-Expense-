@@ -215,8 +215,22 @@
       vatWhtReceipt: str(c.vatWhtReceipt, 30),
       receipts: mapList(c.receipts, sanitizePayment, 500),
       variations: mapList(c.variations, sanitizeVariation, 200),
+      status: CERT_STATUSES.indexOf(c.status) >= 0 ? c.status : '',
+      sentDate: isDate(c.sentDate) ? c.sentDate : '',
+      approvedDate: isDate(c.approvedDate) ? c.approvedDate : '',
+      paidDate: isDate(c.paidDate) ? c.paidDate : '',
       snap: sanitizeSnap(c.snap)
     };
+  }
+  /* Certificate follow-up: Draft -> Submitted -> Approved -> Paid. An empty status is worked out from the receipts. */
+  var CERT_STATUSES = ['draft', 'submitted', 'approved', 'paid'];
+  var CERT_APPROVE_DAYS = 14, CERT_PAY_DAYS = 21;
+  function certStatus(cert, calc) {
+    if (cert.status) return cert.status;
+    return calc && calc.received > 0 && calc.balance <= 0 ? 'paid' : 'draft';
+  }
+  function daysSince(date, today) {
+    return Math.floor((new Date(today + 'T00:00:00Z').getTime() - new Date(date + 'T00:00:00Z').getTime()) / 86400000);
   }
 
   function sanitizeWorker(w) {
@@ -635,8 +649,14 @@
         out.push({ kind: 'bill', projectId: p.id, project: p.name, id: b.id, who: b.supplier, desc: b.desc, due: b.due, amount: bal, level: level });
       });
       p.certs.forEach(function (c) {
-        var bal = certCalc(p, c).balance;
-        if (bal > 0) out.push({ kind: 'cert', projectId: p.id, project: p.name, id: c.id, who: c.no, desc: '', due: '', amount: bal, level: 'none' });
+        var cc = certCalc(p, c), bal = cc.balance, st = certStatus(c, cc);
+        if (bal > 0 && st !== 'paid') {
+          var level = 'none', note = '', d;
+          if (st === 'submitted' && c.sentDate && (d = daysSince(c.sentDate, today)) >= CERT_APPROVE_DAYS) { level = 'overdue'; note = 'submitted:' + d; }
+          else if (st === 'approved' && c.approvedDate && (d = daysSince(c.approvedDate, today)) >= CERT_PAY_DAYS) { level = 'overdue'; note = 'approved:' + d; }
+          else if (st === 'draft' && (d = daysSince(c.date, today)) >= 7) { level = 'later'; note = 'draft:' + d; }
+          out.push({ kind: 'cert', projectId: p.id, project: p.name, id: c.id, who: c.no, desc: '', note: note, status: st, due: '', amount: bal, level: level });
+        }
       });
     });
     var rank = { overdue: 0, soon: 1, later: 2, none: 3 };
@@ -1199,7 +1219,7 @@
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
-    boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, photoIds: photoIds,
+    boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, CERT_STATUSES: CERT_STATUSES, certStatus: certStatus, photoIds: photoIds,
     TRASH_DAYS: TRASH_DAYS, sanitizeTrash: sanitizeTrash, trashPhotoIds: trashPhotoIds, trashRestoreItem: trashRestoreItem
   };
 });

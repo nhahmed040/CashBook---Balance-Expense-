@@ -3,6 +3,9 @@
 (function () {
   var add = {
     en: {
+      cs_draft: 'Draft', cs_submitted: 'Submitted', cs_approved: 'Approved', cs_paid: 'Paid', cs_change: 'Change status',
+      cs_date_submitted: 'Date submitted to the client', cs_date_approved: 'Date approved by the client', cs_date_paid: 'Date paid',
+      cn_submitted: 'Submitted {n} days ago, not approved yet', cn_approved: 'Approved {n} days ago, not paid yet', cn_draft: 'Draft for {n} days, not submitted',
       import_boq: 'Import BoQ (Excel or CSV)', import_preview: 'Import BoQ from Excel',
       import_counts: '{i} items, {r} plain rows, {l} summary lines, {g} group titles, {s} totals. Contract total {tot}.',
       import_skipped: '{n} total/VAT rows left out (the app works them out).',
@@ -34,7 +37,7 @@
       staff: 'Staff', add_staff: 'Add staff member', edit_staff: 'Edit staff member', staff_name: 'Name', staff_phone: 'Phone', staff_role: 'Role', no_staff: 'No staff yet.',
       role_manager: 'Manager', role_accountant: 'Accountant', role_cashier: 'Cashier', role_viewer: 'Viewer', no_business: 'No business',
       staff_note: 'Staff are a directory for tagging who made an entry. To let someone use a book, share it from Settings (Online sync) as editor or view only.',
-      reminders: 'Reminders', due_date: 'Due date', due_label: 'due', overdue: 'Overdue', due_soon: 'Due soon', bills_due_banner: '⏰ {n} unpaid bills overdue or due soon', unpaid_cert: 'Certificate unpaid by client', unpaid_bill: 'Bill to pay',
+      reminders: 'Reminders', due_date: 'Due date', due_label: 'due', overdue: 'Overdue', due_soon: 'Due soon', bills_due_banner: '⏰ {n} bills or certificates need follow-up', unpaid_cert: 'Certificate unpaid by client', unpaid_bill: 'Bill to pay',
       export_report: 'Export report', export_excel: 'Excel', export_pdf: 'PDF / print', report_title: 'Cash report', this_book: 'This book', all_books_opt: 'All books',
       export_boq_xlsx: 'Export Summary BOQ (Excel)', export_cert_xlsx: 'Certificate (Excel)', xlsx_saved: 'Excel file ready', period: 'Period',
       contractor_name: 'Contractor name', variation_total: 'Variation orders total', rebate_pct: 'Rebate %',
