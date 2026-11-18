@@ -3,6 +3,10 @@
 (function () {
   var add = {
     en: {
+      profit_title: 'Profit and cost control', pf_certified: 'Work certified (before VAT)', pf_cost: 'Total costs so far', pf_profit_now: 'Profit so far', pf_progress: 'Progress vs spending',
+      pf_work: 'work done', pf_spent: 'of contract spent', pf_forecast_cost: 'Expected total cost at completion', pf_forecast_profit: 'Expected profit at completion', pf_budget_profit: 'Profit if you stay within budget',
+      pf_warn_spend: 'You have spent a larger share of the contract than the share of work done. Check costs before the next certificate.', pf_warn_loss: 'At this spending rate the project will finish at a loss.',
+      pf_where: 'Where the money went', pf_note: 'Costs are the bills and cash-out entries linked to this project. The forecast assumes costs grow in step with the BoQ work done (needs at least 10% progress).',
       progress_btn: 'Update progress (this period)', pg_note: 'Enter the quantity done in this period for each item. Tap 100% to finish an item. The totals update as you type.',
       pg_total: 'BoQ total', pg_certified: 'Certified so far', pg_period: 'Work this period', pg_todate: 'Work done to date', pg_uncertified: 'Done but not yet certified', pg_left: 'BoQ value still to do',
       pg_prev: 'to date', pg_exceeds: 'Exceeds the BoQ by {n} (becomes a variation)', pg_only_work: 'Show only items with work this period', search_boq: 'Search items',

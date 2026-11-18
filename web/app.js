@@ -886,6 +886,7 @@
         card.appendChild(kv(t('actual_cost'), money(s.costTotal)));
       }
       if (s.owed > 0) card.appendChild(kv(t('owed'), money(s.owed), 'neg'));
+      if (s.certified > 0 || s.costTotal > 0) { var pfc = L.profitOutlook(state, p.id); card.appendChild(kv(t('pf_profit_now'), money(pfc.profitNow), pfc.profitNow < 0 ? 'neg' : 'pos')); }
       var open = function () { ui.projectId = p.id; ui.section = 'overview'; renderProjects(); window.scrollTo(0, 0); };
       card.addEventListener('click', open);
       card.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
@@ -1115,6 +1116,26 @@
     k.appendChild(kv(t('margin'), money(s.margin), s.margin < 0 ? 'neg' : 'pos'));
     k.appendChild(el('p', 'note', t('cost_note')));
     body.appendChild(k);
+
+    var pf = L.profitOutlook(state, p.id), pp = panel(t('profit_title'));
+    pp.appendChild(kv(t('pf_certified'), money(pf.certified)));
+    pp.appendChild(kv(t('pf_cost'), money(pf.cost)));
+    pp.appendChild(kv(t('pf_profit_now'), money(pf.profitNow) + (pf.certified > 0 ? ' (' + pf.marginNow + '%)' : ''), pf.profitNow < 0 ? 'neg' : 'pos'));
+    pp.appendChild(kv(t('pf_progress'), pf.physicalPct + '% ' + t('pf_work') + ' · ' + pf.spentPct + '% ' + t('pf_spent')));
+    if (pf.forecastProfit !== null) {
+      pp.appendChild(kv(t('pf_forecast_cost'), money(pf.forecastCost)));
+      pp.appendChild(kv(t('pf_forecast_profit'), money(pf.forecastProfit) + ' (' + pf.forecastMargin + '%)', pf.forecastProfit < 0 ? 'neg' : 'pos'));
+    }
+    if (pf.budgetProfit !== null) pp.appendChild(kv(t('pf_budget_profit'), money(pf.budgetProfit), pf.budgetProfit < 0 ? 'neg' : 'pos'));
+    if (pf.warn) pp.appendChild(el('div', 'warn', t('pf_warn_' + pf.warn)));
+    if (pf.shares.length) {
+      pp.appendChild(el('h3', null, t('pf_where')));
+      pf.shares.forEach(function (x) {
+        pp.appendChild(kv(codeLabel(x.code) + ' (' + x.pct + '%)', money(x.amount) + (x.over ? ' ⚠' : ''), x.over ? 'neg' : ''));
+      });
+    }
+    pp.appendChild(el('p', 'note', t('pf_note')));
+    body.appendChild(pp);
 
     var ph = panel(t('site_photos'));
     var holder = el('div');
@@ -2687,7 +2708,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.14.0', APP_BUILD = 29;
+  var APP_VERSION = '2.15.0', APP_BUILD = 30;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

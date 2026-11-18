@@ -1316,6 +1316,36 @@
     return Math.round(out * 1e8) / 1e8;
   }
 
+  /* Profit so far and where the project is heading.
+     now = work certified (gross, before VAT) - all costs; the forecast scales costs by the share of the BoQ done. */
+  function profitOutlook(state, projectId) {
+    var s = projectSummary(state, projectId), p = null;
+    if (!s) return null;
+    state.projects.forEach(function (x) { if (x.id === projectId) p = x; });
+    var value = round2(s.contractSum + (s.variationTotal || 0));
+    var out = {
+      value: value, certified: s.certified, cost: s.costTotal,
+      profitNow: round2(s.certified - s.costTotal),
+      marginNow: s.certified > 0 ? round2((s.certified - s.costTotal) / s.certified * 100) : 0,
+      physicalPct: s.physicalPct, spentPct: value > 0 ? round2(s.costTotal / value * 100) : 0,
+      forecastCost: null, forecastProfit: null, forecastMargin: null, budgetProfit: null, warn: '', shares: []
+    };
+    if (s.boqTotal > 0 && s.physicalPct >= 10 && s.costTotal > 0) {
+      out.forecastCost = round2(s.costTotal / (s.physicalPct / 100));
+      out.forecastProfit = round2(value - out.forecastCost);
+      out.forecastMargin = value > 0 ? round2(out.forecastProfit / value * 100) : 0;
+    }
+    if (s.budgetTotal > 0 && value > 0) out.budgetProfit = round2(value - s.budgetTotal);
+    if (s.physicalPct > 0 && out.spentPct > s.physicalPct + 10) out.warn = 'spend';
+    else if (out.forecastProfit !== null && out.forecastProfit < 0) out.warn = 'loss';
+    CODES.forEach(function (c) {
+      var v = s.costByCode[c] || 0;
+      if (v > 0) out.shares.push({ code: c, amount: v, pct: s.costTotal > 0 ? round2(v / s.costTotal * 100) : 0, budget: p.budgets[c] || 0, over: (p.budgets[c] || 0) > 0 && v > p.budgets[c] });
+    });
+    out.shares.sort(function (a, b) { return b.amount - a.amount; });
+    return out;
+  }
+
   function addDaysStr(date, n) {
     var d = new Date(date + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + n);
@@ -1359,7 +1389,7 @@
   }
 
   return {
-    cashForecast: cashForecast,
+    cashForecast: cashForecast, profitOutlook: profitOutlook,
     calcEval: calcEval,
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,
     sanitizeContact: sanitizeContact, sanitizeBusiness: sanitizeBusiness, contactBalances: contactBalances,

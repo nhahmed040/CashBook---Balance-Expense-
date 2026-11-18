@@ -96,6 +96,12 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Profit and cost control (2.15)
+
+- A **Profit and cost control** panel on the project Overview: work certified, costs so far, profit so far and margin, progress vs spending, the expected cost and profit at completion (costs scaled by BoQ work done, from 10% progress), profit if you stay within budget, and where the money went by cost type (⚠ when over budget).
+- Warns when you have spent a larger share of the contract than the share of work done, or when the forecast is a loss.
+- Each project card shows **Profit so far**.
+
 ## Monthly progress (2.14)
 
 - On a project's **BoQ** tab, **Update progress (this period)** lists every BoQ item under its group/section title. Type the quantity done this period (or tap **100%** to finish the item). It shows to-date quantity and %, warns when an item exceeds the BoQ (becomes a variation), and keeps running totals: BoQ total, certified so far, work this period, done but not certified, BoQ value still to do.
