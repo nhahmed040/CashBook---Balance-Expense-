@@ -3,6 +3,10 @@
 (function () {
   var add = {
     en: {
+      diary: 'Diary', diary_add: 'Add diary entry', diary_empty: 'No diary entries yet. Write what happened on site today.', diary_weather: 'Weather', diary_workers: 'Workers on site', diary_workers_short: 'workers', diary_work: 'Work done', diary_problems: 'Problems / delays', diary_visitors: 'Visitors / inspections', diary_report: 'Progress report', diary_confirm_delete: 'Delete this diary entry?',
+      wx_sunny: 'Sunny', wx_cloudy: 'Cloudy', wx_rain: 'Rain', wx_windy: 'Windy', wx_hot: 'Very hot',
+      supplier_stmt: 'Supplier statement', worker_stmt: 'Worker statement', stmt_print: 'Print / share', stmt_csv: 'Export CSV', stmt_billed: 'Billed', stmt_earned: 'Earned', stmt_unpaid: 'Not yet paid', stmt_this_week: 'This week', stmt_this_month: 'This month', stmt_all: 'All time', worker: 'Worker', edit: 'Edit',
+      search_ph: 'Search entries, bills, certificates, contacts…', search_none: 'Nothing found.',
       profit_title: 'Profit and cost control', pf_certified: 'Work certified (before VAT)', pf_cost: 'Total costs so far', pf_profit_now: 'Profit so far', pf_progress: 'Progress vs spending',
       pf_work: 'work done', pf_spent: 'of contract spent', pf_forecast_cost: 'Expected total cost at completion', pf_forecast_profit: 'Expected profit at completion', pf_budget_profit: 'Profit if you stay within budget',
       pf_warn_spend: 'You have spent a larger share of the contract than the share of work done. Check costs before the next certificate.', pf_warn_loss: 'At this spending rate the project will finish at a loss.',

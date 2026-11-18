@@ -240,6 +240,20 @@
     return { id: validId(w.id) ? w.id : newId(), name: name, role: str(w.role, 40), rate: num(w.rate, 0) };
   }
 
+  /* Site diary: one entry per day (several allowed). Photos stay on the phone. */
+  var WEATHER = ['sunny', 'cloudy', 'rain', 'windy', 'hot'];
+  function sanitizeDiary(d) {
+    if (!d || typeof d !== 'object' || !isDate(d.date)) return null;
+    var out = {
+      id: validId(d.id) ? d.id : newId(), date: d.date,
+      weather: WEATHER.indexOf(d.weather) >= 0 ? d.weather : '',
+      workers: Math.round(num(d.workers, 0, 100000)),
+      work: str(d.work, 1000), problems: str(d.problems, 600), visitors: str(d.visitors, 200),
+      photos: photoIds(d.photos)
+    };
+    return out.work || out.problems || out.visitors || out.photos.length || out.workers ? out : null;
+  }
+
   function sanitizeAttendance(a) {
     if (!a || typeof a !== 'object' || !isDate(a.date) || !validId(a.workerId)) return null;
     return {
@@ -311,6 +325,7 @@
       bills: mapList(p.bills, sanitizeBill, 5000),
       certs: mapList(p.certs, sanitizeCert, 1000),
       workers: workers,
+      diary: mapList(p.diary, sanitizeDiary, 3000),
       attendance: Object.keys(attMap).map(function (k) { return attMap[k]; }),
       boq: p.boqLines >= 2 ? mapList(p.boq, sanitizeBoqItem, 3000) : migrateBoq(mapList(p.boq, sanitizeBoqItem, 3000), p.boqLines ? 1 : 0),
       boqLines: 2,
@@ -327,7 +342,7 @@
     function map(m, isNum) {
       var out = {}, n = 0;
       if (m && typeof m === 'object') Object.keys(m).forEach(function (k) {
-        if (n < 60000 && /^(info|ord|[bclwa]\d{1,20})$/.test(k) && (isNum ? typeof m[k] === 'number' && isFinite(m[k]) : typeof m[k] === 'string' && m[k].length < 20)) { out[k] = m[k]; n++; }
+        if (n < 60000 && /^(info|ord|[bclwad]\d{1,20})$/.test(k) && (isNum ? typeof m[k] === 'number' && isFinite(m[k]) : typeof m[k] === 'string' && m[k].length < 20)) { out[k] = m[k]; n++; }
       });
       return out;
     }
@@ -339,7 +354,7 @@
       st: typeof x.st === 'number' && isFinite(x.st) ? x.st : 0
     };
   }
-  var REC_LISTS = { b: 'boq', c: 'certs', l: 'bills', w: 'workers', a: 'attendance' };
+  var REC_LISTS = { b: 'boq', c: 'certs', l: 'bills', w: 'workers', a: 'attendance', d: 'diary' };
   /* key -> record. Photos stay on the phone (they are not shared). */
   function projectRecords(p) {
     var recs = {}, info = {};
@@ -360,22 +375,24 @@
   }
   /* put merged records back into p (in place). Returns p. */
   function applyProjectRecords(p, merged) {
-    var lists = { boq: [], certs: [], bills: [], workers: [], attendance: [] }, ord = (merged.ord && merged.ord.ids) || [], pos = {};
+    var lists = { boq: [], certs: [], bills: [], workers: [], attendance: [], diary: [] }, ord = (merged.ord && merged.ord.ids) || [], pos = {};
     ord.forEach(function (id, i) { pos[id] = i; });
-    var localBills = {};
+    var localBills = {}, localDiary = {};
     p.bills.forEach(function (b) { localBills[b.id] = b; });
+    (p.diary || []).forEach(function (d) { localDiary[d.id] = d; });
     Object.keys(merged).forEach(function (k) {
       var pre = k.charAt(0), list = REC_LISTS[pre];
-      if (!list || k === 'info' || k === 'ord' || !/^[bclwa]\d+$/.test(k)) return;
+      if (!list || k === 'info' || k === 'ord' || !/^[bclwad]\d+$/.test(k)) return;
       var rec = JSON.parse(JSON.stringify(merged[k]));
       if (pre === 'l' && localBills[rec.id]) rec.photos = localBills[rec.id].photos;
+      if (pre === 'd' && localDiary[rec.id]) rec.photos = localDiary[rec.id].photos;
       lists[list].push(rec);
     });
     lists.boq.sort(function (x, y) {
       var px = pos[x.id] == null ? 1e9 : pos[x.id], py = pos[y.id] == null ? 1e9 : pos[y.id];
       return px - py || x.id - y.id;
     });
-    ['certs', 'bills', 'workers', 'attendance'].forEach(function (l) { lists[l].sort(function (x, y) { return x.id - y.id; }); });
+    ['certs', 'bills', 'workers', 'attendance', 'diary'].forEach(function (l) { lists[l].sort(function (x, y) { return x.id - y.id; }); });
     var raw = Object.assign({}, merged.info || {}, lists, { id: p.id, boqLines: 2, photos: p.photos, sync: p.sync });
     var clean = sanitizeProject(raw, 1);
     Object.keys(p).forEach(function (k) { delete p[k]; });
@@ -1346,6 +1363,65 @@
     return out;
   }
 
+  /* ---------- statements ---------- */
+  /* All bills and payments of one supplier, oldest first, with a running balance (what you owe). */
+  function supplierStatement(project, supplier) {
+    var ev = [];
+    project.bills.forEach(function (b) {
+      if ((b.supplier || '') !== (supplier || '')) return;
+      ev.push({ date: b.date, kind: 'bill', text: b.desc || '', amount: b.amount, order: b.id });
+      b.payments.forEach(function (p) { ev.push({ date: p.date, kind: 'pay', text: b.desc || '', amount: p.amount, order: p.id }); });
+    });
+    ev.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.kind === 'bill' ? -1 : 1) - (b.kind === 'bill' ? -1 : 1) || a.order - b.order; });
+    var bal = 0, billed = 0, paid = 0;
+    ev.forEach(function (e) {
+      if (e.kind === 'bill') { bal = round2(bal + e.amount); billed = round2(billed + e.amount); } else { bal = round2(bal - e.amount); paid = round2(paid + e.amount); }
+      e.balance = bal;
+    });
+    return { rows: ev, billed: billed, paid: paid, balance: bal };
+  }
+  function supplierNames(project) {
+    var seen = {}, out = [];
+    project.bills.forEach(function (b) { var k = b.supplier || ''; if (!seen[k]) { seen[k] = 1; out.push(k); } });
+    return out.sort();
+  }
+  /* A worker's days and wages between two dates (all dates when empty). */
+  function workerStatement(project, workerId, from, to) {
+    var rows = project.attendance.filter(function (a) {
+      return a.workerId === workerId && (!from || a.date >= from) && (!to || a.date <= to);
+    }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; }).map(function (a) {
+      return { date: a.date, days: a.days, rate: a.rate, amount: round2(a.days * a.rate), paid: a.paid };
+    });
+    return { rows: rows, days: sum(rows, function (r) { return r.days; }), earned: round2(sum(rows, function (r) { return r.amount; })),
+      paid: round2(sum(rows, function (r) { return r.paid ? r.amount : 0; })), unpaid: round2(sum(rows, function (r) { return r.paid ? 0 : r.amount; })) };
+  }
+  /* Diary entries between two dates, oldest first. */
+  function diaryRange(project, from, to) {
+    return (project.diary || []).filter(function (d) { return (!from || d.date >= from) && (!to || d.date <= to); })
+      .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+  }
+
+  /* ---------- search ---------- */
+  function searchAll(state, query, limit) {
+    var q = String(query || '').trim().toLowerCase(), max = limit || 8, out = { entries: [], bills: [], certs: [], contacts: [], boq: [], diary: [] };
+    if (q.length < 2) return out;
+    function has() { for (var i = 0; i < arguments.length; i++) if (String(arguments[i] == null ? '' : arguments[i]).toLowerCase().indexOf(q) >= 0) return true; return false; }
+    state.books.forEach(function (b) {
+      b.entries.forEach(function (e) {
+        if (out.entries.length < max * 3 && has(e.note, e.category, e.party, e.amount, e.date)) out.entries.push({ bookId: b.id, book: b.name, entry: e });
+      });
+    });
+    state.projects.forEach(function (p) {
+      p.bills.forEach(function (b) { if (out.bills.length < max && has(b.supplier, b.desc, b.amount)) out.bills.push({ projectId: p.id, project: p.name, bill: b }); });
+      p.certs.forEach(function (c) { if (out.certs.length < max && has(c.no, c.title, c.date, c.gross)) out.certs.push({ projectId: p.id, project: p.name, cert: c }); });
+      p.boq.forEach(function (i) { if (out.boq.length < max && has(i.no, i.desc)) out.boq.push({ projectId: p.id, project: p.name, item: i }); });
+      (p.diary || []).forEach(function (d) { if (out.diary.length < max && has(d.work, d.problems, d.visitors, d.date)) out.diary.push({ projectId: p.id, project: p.name, entry: d }); });
+    });
+    state.contacts.forEach(function (c) { if (out.contacts.length < max && has(c.name, c.phone, c.email, c.company, c.note)) out.contacts.push(c); });
+    out.entries = out.entries.slice(0, max * 3);
+    return out;
+  }
+
   function addDaysStr(date, n) {
     var d = new Date(date + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + n);
@@ -1389,6 +1465,7 @@
   }
 
   return {
+    rowsToCsv: rowsToCsv, supplierStatement: supplierStatement, supplierNames: supplierNames, workerStatement: workerStatement, diaryRange: diaryRange, searchAll: searchAll, sanitizeDiary: sanitizeDiary, WEATHER: WEATHER,
     cashForecast: cashForecast, profitOutlook: profitOutlook,
     calcEval: calcEval,
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,

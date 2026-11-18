@@ -233,5 +233,23 @@
     return page(d.title, d.lang, h);
   }
 
-  return { esc: esc, certificateHtml: certificateHtml, statementHtml: statementHtml, reportHtml: reportHtml };
+  /* generic printable table: statements and diary reports */
+  function tableHtml(d) {
+    var h = '<h1>' + esc(d.title) + '</h1>';
+    if (d.sub) h += '<p class="sub">' + esc(d.sub) + '</p>';
+    if (d.meta) h += metaRows(d.meta);
+    (d.blocks || []).forEach(function (b) {
+      if (b.title) h += '<h2>' + esc(b.title) + '</h2>';
+      h += '<table><thead><tr>' + b.head.map(function (c) { return '<th' + (c.n ? ' class="n"' : '') + '>' + esc(c.h) + '</th>'; }).join('') + '</tr></thead><tbody>';
+      b.rows.forEach(function (r) {
+        h += '<tr>' + r.map(function (v, i) { return '<td' + (b.head[i] && b.head[i].n ? ' class="n"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr>';
+      });
+      h += '</tbody></table>';
+      if (b.totals) { h += '<table>'; b.totals.forEach(function (r) { h += row(r[0], r[1], r[2] || ''); }); h += '</table>'; }
+    });
+    if (d.note) h += '<p class="note">' + esc(d.note) + '</p>';
+    return page(d.title, d.lang, h);
+  }
+
+  return { esc: esc, certificateHtml: certificateHtml, statementHtml: statementHtml, reportHtml: reportHtml, tableHtml: tableHtml };
 });

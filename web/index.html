@@ -22,6 +22,7 @@
   <header class="top">
     <h1>CashBook</h1>
     <div class="bookbar">
+      <button type="button" id="searchBtn" class="icon" aria-label="Search" title="Search">🔍</button>
       <button type="button" id="syncDot" class="sync" aria-label="Sync" hidden></button>
       <select id="bizSelect" aria-label="Business" hidden></select>
       <select id="bookSelect" aria-label="Book"></select>
@@ -242,6 +243,7 @@
       <input type="date" id="date" required>
       <input type="text" id="category" list="catList" data-i18n-ph="category" placeholder="Category" maxlength="40">
       <datalist id="catList"></datalist>
+      <div id="catChips" class="chips"></div>
       <select id="contactSel" aria-label="Contact"></select>
       <div class="row">
         <select id="modeSel" aria-label="Payment mode"></select>

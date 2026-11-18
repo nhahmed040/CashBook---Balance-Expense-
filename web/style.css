@@ -580,3 +580,10 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .progIn { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
 .progIn input { width: 78px; text-align: right; padding: 8px; }
 .progfin { min-height: 0; padding: 6px 8px; font-size: .8rem; }
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 4px}
+.chips:empty{display:none}
+.chips button{padding:4px 10px;border-radius:14px;font-size:.85rem;min-height:0}
+.srchinp{width:100%;margin-bottom:8px}
+.srchgrp{margin:8px 0 2px;font-weight:600}
+.diaryimg{display:flex;gap:4px;flex-wrap:wrap}

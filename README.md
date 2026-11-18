@@ -201,3 +201,11 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 ## Google sign-in (Android app)
 
 "Continue with Google" appears on the sign-in screen in the Android app. It needs, in Firebase: Authentication → Sign-in method → **Google** enabled, and an **Android app** registered with package `com.nhahmed.cashbook` and the SHA-1 of `app/cashbook.keystore` (`keytool -list -v -keystore app/cashbook.keystore -alias cashbook -storepass cashbook-sideload`). The Web client ID of the Google provider is set in `web/cloud-config.js`. A Google account with the same email as an existing email/password account is the same account in CashBook. Phone (SMS) two-factor is not supported yet.
+
+## 2.16.0
+
+- **Supplier statement**: in a project's Bills, a printable/CSV statement per supplier (bills, payments, running balance).
+- **Worker statement**: in Labour, days and wages per worker for this week, this month or all time, with paid / not yet paid.
+- **Site diary**: new Diary section in each project (date, weather, workers on site, work done, problems, visitors, photos) with a printable weekly/monthly progress report. Shared projects sync the diary; photos stay on each phone.
+- **Search** (🔍 at the top): finds entries, bills, certificates, BoQ rows, diary notes and contacts, and jumps to them.
+- **Quick add**: recent categories appear as tap chips in the entry form.

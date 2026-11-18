@@ -4,7 +4,7 @@
   var L = window.CBLogic;
   var STORAGE_KEY = 'cashbook.data.v2'; // same key as 1.1: data is upgraded in place
   var OLD_KEY = 'cashbook.entries.v1';
-  var SECTIONS = ['overview', 'boq', 'budget', 'bills', 'client', 'labour', 'books'];
+  var SECTIONS = ['overview', 'boq', 'budget', 'bills', 'client', 'labour', 'diary', 'books'];
 
   var $ = function (id) { return document.getElementById(id); };
   var CAL = window.CBCal;
@@ -1044,6 +1044,208 @@
     return bar;
   }
 
+  /* ---------- statements ---------- */
+  function statementModal(o) {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal importmodal');
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    m.appendChild(el('h2', null, o.title));
+    m.appendChild(el('p', 'muted small', o.sub));
+    var pn = panel(null);
+    o.rows.forEach(function (r) {
+      var row = el('div', 'improw'), tx = el('span', 'stext');
+      tx.appendChild(el('b', null, r.a)); tx.appendChild(el('small', 'muted', r.b));
+      row.appendChild(tx); row.appendChild(el('span', r.cls || '', r.c));
+      pn.appendChild(row);
+    });
+    if (!o.rows.length) pn.appendChild(el('p', 'muted small', t('no_data')));
+    o.totals.forEach(function (x) { pn.appendChild(kv(x[0], x[1], x[2])); });
+    m.appendChild(pn);
+    var br = el('div', 'btnrow');
+    br.appendChild(btn(t('stmt_print'), 'primary', function () {
+      printDoc(o.title, window.CBPrint.tableHtml({ title: o.title, lang: state.settings.lang, sub: o.sub, meta: o.meta, blocks: o.blocks, note: '' }));
+    }));
+    br.appendChild(btn(t('stmt_csv'), '', function () { saveFile(o.file + '-' + L.todayStr() + '.csv', 'text/csv', L.rowsToCsv(o.csv)); }));
+    m.appendChild(br);
+    m.appendChild(btn(t('close'), 'block', close));
+    ov.appendChild(m);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.body.appendChild(ov);
+  }
+
+  function pickSupplierStatement(p) {
+    var names = L.supplierNames(p);
+    if (!names.length) { toast(t('no_bills')); return; }
+    function show(name) {
+      var s = L.supplierStatement(p, name), label = name || t('uncategorized');
+      var head = [{ h: t('date') }, { h: t('description') }, { h: t('stmt_billed'), n: 1 }, { h: t('paid'), n: 1 }, { h: t('balance_due'), n: 1 }];
+      var rows = s.rows.map(function (r) { return [fmtDate(r.date), r.text, r.kind === 'bill' ? money(r.amount) : '', r.kind === 'pay' ? money(r.amount) : '', money(r.balance)]; });
+      statementModal({
+        title: t('supplier_stmt') + ': ' + label, sub: p.name + ' · ' + fmtDate(L.todayStr()),
+        rows: s.rows.map(function (r) { return { a: (r.kind === 'pay' ? t('paid') + ' · ' : '') + (r.text || label), b: fmtDate(r.date) + ' · ' + t('balance_due') + ' ' + money(r.balance), c: money(r.amount), cls: r.kind === 'pay' ? 'pos' : 'neg' }; }),
+        totals: [[t('stmt_billed'), money(s.billed)], [t('paid'), money(s.paid)], [t('balance_due'), money(s.balance), s.balance > 0 ? 'neg' : 'pos']],
+        meta: [[t('project'), p.name], [t('supplier'), label]],
+        blocks: [{ head: head, rows: rows, totals: [[t('stmt_billed'), money(s.billed)], [t('paid'), money(s.paid)], [t('balance_due'), money(s.balance), 'total']] }],
+        csv: [head.map(function (h) { return h.h; })].concat(rows), file: 'statement-' + safeName(label)
+      });
+    }
+    if (names.length === 1) return show(names[0]);
+    actionSheet(t('supplier_stmt'), names.map(function (n) { return { label: n || t('uncategorized'), run: function () { show(n); } }; }));
+  }
+
+  function pickWorkerStatement(p, wk) {
+    function show(w, from, to) {
+      var s = L.workerStatement(p, w.id, from, to);
+      var head = [{ h: t('date') }, { h: t('days'), n: 1 }, { h: t('rate'), n: 1 }, { h: t('amount'), n: 1 }, { h: t('paid') }];
+      var rows = s.rows.map(function (r) { return [fmtDate(r.date), String(r.days), money(r.rate), money(r.amount), r.paid ? '✓' : '']; });
+      statementModal({
+        title: t('worker_stmt') + ': ' + w.name, sub: p.name + (from ? ' · ' + fmtDate(from) + ' – ' + fmtDate(to) : ''),
+        rows: s.rows.map(function (r) { return { a: fmtDate(r.date) + ' · ' + r.days + ' ' + t('days'), b: money(r.rate) + (r.paid ? ' · ✓ ' + t('paid') : ''), c: money(r.amount), cls: r.paid ? 'pos' : 'neg' }; }),
+        totals: [[t('days'), String(s.days)], [t('stmt_earned'), money(s.earned)], [t('paid'), money(s.paid)], [t('stmt_unpaid'), money(s.unpaid), s.unpaid > 0 ? 'neg' : 'pos']],
+        meta: [[t('project'), p.name], [t('worker'), w.name + (w.role ? ' (' + w.role + ')' : '')]],
+        blocks: [{ head: head, rows: rows, totals: [[t('days'), String(s.days)], [t('stmt_earned'), money(s.earned)], [t('paid'), money(s.paid)], [t('stmt_unpaid'), money(s.unpaid), 'total']] }],
+        csv: [head.map(function (h) { return h.h; })].concat(rows), file: 'worker-' + safeName(w.name)
+      });
+    }
+    function pickRange(w) {
+      actionSheet(w.name, [
+        { label: t('stmt_this_week'), run: function () { show(w, wk.from, wk.to); } },
+        { label: t('stmt_this_month'), run: function () { var d = L.todayStr(); show(w, d.slice(0, 8) + '01', d.slice(0, 8) + '31'); } },
+        { label: t('stmt_all'), run: function () { show(w, '', ''); } }
+      ]);
+    }
+    if (p.workers.length === 1) return pickRange(p.workers[0]);
+    actionSheet(t('worker_stmt'), p.workers.map(function (w) { return { label: w.name, run: function () { pickRange(w); } }; }));
+  }
+
+  /* ---------- site diary ---------- */
+  var WEATHER_ICON = { sunny: '☀️', cloudy: '☁️', rain: '🌧️', windy: '💨', hot: '🥵' };
+  function secDiary(body, p) {
+    var pn = panel(t('diary'));
+    pn.appendChild(btn(t('diary_add'), 'primary block', function () { editDiary(p, null); }));
+    if ((p.diary || []).length) pn.appendChild(btn(t('diary_report'), 'block', function () { diaryReportPicker(p); }));
+    body.appendChild(pn);
+    var list = (p.diary || []).slice().sort(function (a, c) { return a.date < c.date ? 1 : a.date > c.date ? -1 : c.id - a.id; });
+    if (!list.length) body.appendChild(el('p', 'empty', t('diary_empty')));
+    list.forEach(function (d) {
+      var card = panel(null);
+      card.appendChild(el('h3', null, (WEATHER_ICON[d.weather] || '') + ' ' + fmtDate(d.date) + (d.workers ? ' · ' + d.workers + ' ' + t('diary_workers_short') : '')));
+      if (d.work) card.appendChild(el('p', null, d.work));
+      if (d.problems) card.appendChild(el('p', 'neg small', '⚠ ' + d.problems));
+      if (d.visitors) card.appendChild(el('p', 'muted small', t('diary_visitors') + ': ' + d.visitors));
+      thumbsOnly(card, d.photos);
+      card.appendChild(btn(t('edit'), '', function () { editDiary(p, d); }));
+      body.appendChild(card);
+    });
+  }
+
+  function editDiary(p, d) {
+    var isNew = !d, v0 = d || { date: L.todayStr(), weather: '', workers: '', work: '', problems: '', visitors: '' };
+    var pst = newPhotoState(d ? d.photos : []);
+    openForm({
+      title: isNew ? t('diary_add') : t('edit'),
+      fields: [
+        { key: 'date', label: t('date'), type: 'date', value: v0.date, required: true },
+        { key: 'weather', label: t('diary_weather'), type: 'select', value: v0.weather, options: [{ value: '', label: '—' }].concat(L.WEATHER.map(function (w) { return { value: w, label: WEATHER_ICON[w] + ' ' + t('wx_' + w) }; })) },
+        { key: 'workers', label: t('diary_workers'), type: 'number', min: 0, noCalc: true, value: v0.workers },
+        { key: 'work', label: t('diary_work'), type: 'text', value: v0.work, max: 1000 },
+        { key: 'problems', label: t('diary_problems'), type: 'text', value: v0.problems, max: 600 },
+        { key: 'visitors', label: t('diary_visitors'), type: 'text', value: v0.visitors, max: 200 },
+        { key: 'photos', type: 'photos', state: pst }
+      ],
+      onSubmit: function (v) {
+        var nd = L.sanitizeDiary({ id: d ? d.id : undefined, date: L.isDate(v.date) ? v.date : L.todayStr(), weather: v.weather, workers: v.workers, work: v.work, problems: v.problems, visitors: v.visitors, photos: pst.ids });
+        if (!nd) return t('required');
+        if (!p.diary) p.diary = [];
+        if (isNew) p.diary.push(nd); else p.diary[p.diary.indexOf(d)] = nd;
+        save(); renderAll();
+        return null;
+      },
+      onDelete: isNew ? null : function () {
+        if (!window.confirm(t('diary_confirm_delete'))) return false;
+        p.diary = p.diary.filter(function (x) { return x.id !== d.id; });
+        save(); renderAll();
+        return true;
+      }
+    });
+  }
+
+  function diaryReportPicker(p) {
+    var d = L.todayStr();
+    function go(from, to, label) {
+      var list = L.diaryRange(p, from, to);
+      if (!list.length) { toast(t('no_data')); return; }
+      var head = [{ h: t('date') }, { h: t('diary_weather') }, { h: t('diary_workers_short'), n: 1 }, { h: t('diary_work') }, { h: t('diary_problems') }];
+      var rows = list.map(function (x) { return [fmtDate(x.date), x.weather ? t('wx_' + x.weather) : '', String(x.workers || ''), x.work, x.problems]; });
+      var title = t('diary_report') + ': ' + p.name;
+      printDoc(title, window.CBPrint.tableHtml({ title: title, lang: state.settings.lang, sub: label + ' · ' + fmtDate(from) + ' – ' + fmtDate(to), meta: [[t('project'), p.name], [t('client'), p.client]], blocks: [{ head: head, rows: rows }], note: '' }));
+    }
+    var wk = L.weekRange(d);
+    actionSheet(t('diary_report'), [
+      { label: t('stmt_this_week'), run: function () { go(wk.from, wk.to, t('stmt_this_week')); } },
+      { label: t('stmt_this_month'), run: function () { go(d.slice(0, 8) + '01', d.slice(0, 8) + '31', t('stmt_this_month')); } },
+      { label: t('stmt_all'), run: function () { var all = L.diaryRange(p, '', ''); go(all[0].date, all[all.length - 1].date, t('stmt_all')); } }
+    ]);
+  }
+
+  /* ---------- search ---------- */
+  function openSearch() {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal importmodal');
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    m.appendChild(el('h2', null, t('search')));
+    var inp = document.createElement('input');
+    inp.type = 'search'; inp.className = 'srchinp'; inp.placeholder = t('search_ph'); inp.maxLength = 60;
+    m.appendChild(inp);
+    var out = el('div'); m.appendChild(out);
+    m.appendChild(btn(t('close'), 'block', close));
+    function goProject(id, sec) { close(); ui.projectId = id; ui.section = sec; showView('projects'); renderProjects(); window.scrollTo(0, 0); }
+    function line(a, b, c, run) {
+      var row = el('div', 'improw'), tx = el('span', 'stext');
+      tx.appendChild(el('b', null, a)); tx.appendChild(el('small', 'muted', b));
+      row.appendChild(tx); if (c) row.appendChild(el('span', null, c));
+      row.addEventListener('click', run); out.appendChild(row);
+    }
+    function group(title, n) { if (n) out.appendChild(el('div', 'srchgrp', title + ' (' + n + ')')); }
+    function render() {
+      out.textContent = '';
+      var r = L.searchAll(state, inp.value, 8);
+      var total = r.entries.length + r.bills.length + r.certs.length + r.contacts.length + r.boq.length + r.diary.length;
+      if (inp.value.trim().length >= 2 && !total) out.appendChild(el('p', 'muted small', t('search_none')));
+      group(t('entries'), r.entries.length);
+      r.entries.forEach(function (x) {
+        var e = x.entry;
+        line((e.category || e.note || e.party || (e.type === 'in' ? t('cash_in') : t('cash_out'))), x.book + ' · ' + fmtDate(e.date) + (e.note && e.category ? ' · ' + e.note : ''), (e.type === 'out' ? '−' : '+') + money(e.amount),
+          function () { close(); state.current = x.bookId; ui.bookOpen = true; save(); showView('entries'); renderAll(); openEntry(e.id); });
+      });
+      group(t('bills'), r.bills.length);
+      r.bills.forEach(function (x) { line((x.bill.supplier || '') + (x.bill.desc ? ' – ' + x.bill.desc : ''), x.project + ' · ' + fmtDate(x.bill.date), money(x.bill.amount), function () { goProject(x.projectId, 'bills'); }); });
+      group(t('client'), r.certs.length);
+      r.certs.forEach(function (x) { line((x.cert.no || '') + ' ' + (x.cert.title || ''), x.project + ' · ' + fmtDate(x.cert.date), '', function () { goProject(x.projectId, 'client'); }); });
+      group(t('boq'), r.boq.length);
+      r.boq.forEach(function (x) { line((x.item.no || '') + ' ' + x.item.desc, x.project, '', function () { goProject(x.projectId, 'boq'); }); });
+      group(t('diary'), r.diary.length);
+      r.diary.forEach(function (x) { line(fmtDate(x.entry.date) + ' · ' + (x.entry.work || x.entry.problems || ''), x.project, '', function () { goProject(x.projectId, 'diary'); }); });
+      group(t('contacts'), r.contacts.length);
+      r.contacts.forEach(function (c) { line(c.name, [c.phone, c.email].filter(Boolean).join(' · '), '', function () { close(); showView('contacts'); renderAll(); }); });
+    }
+    inp.addEventListener('input', render);
+    ov.appendChild(m);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.body.appendChild(ov);
+    inp.focus();
+  }
+  $('searchBtn').addEventListener('click', openSearch);
+
+  /* ---------- quick add: tap a recent category ---------- */
+  function renderCatChips() {
+    var box = $('catChips'), type = $('entryForm').elements.type.value, cnt = {};
+    box.textContent = '';
+    state.books.forEach(function (b) { b.entries.forEach(function (e) { if (e.type === type && e.category) cnt[e.category] = (cnt[e.category] || 0) + 1; }); });
+    Object.keys(cnt).sort(function (a, c) { return cnt[c] - cnt[a] || (a < c ? -1 : 1); }).slice(0, 6).forEach(function (c) {
+      box.appendChild(btn(c, '', function () { $('category').value = c; }));
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#entryForm input[name=type]'), function (r) { r.addEventListener('change', renderCatChips); });
+
   function renderProjectDetail(root) {
     var p = currentProject();
     root.textContent = '';
@@ -1058,7 +1260,7 @@
     root.appendChild(seg);
     var body = el('div', 'stack');
     root.appendChild(body);
-    ({ overview: secOverview, boq: secBoq, budget: secBudget, bills: secBills, client: secClient, labour: secLabour, books: secBooks })[ui.section](body, p);
+    ({ overview: secOverview, boq: secBoq, budget: secBudget, bills: secBills, client: secClient, labour: secLabour, diary: secDiary, books: secBooks })[ui.section](body, p);
   }
 
   /* projects shared "view only": block every edit action, keep reading, printing and exporting */
@@ -1067,7 +1269,7 @@
     if (!p || !p.sync || p.sync.role !== 'view' || !$('projDetail').contains(ev.target)) return;
     var tg = ev.target.closest && ev.target.closest('button, .boqrow, .pay, input, select, textarea, label, [role=button]');
     if (!tg) return;
-    var safe = ['print_statement', 'export_report', 'export_boq', 'export_boq_xlsx', 'print', 'export_cert_xlsx'].map(function (k) { return t(k); });
+    var safe = ['print_statement', 'export_report', 'export_boq', 'export_boq_xlsx', 'print', 'export_cert_xlsx', 'stmt_print', 'stmt_csv', 'diary_report', 'supplier_stmt', 'worker_stmt'].map(function (k) { return t(k); });
     if (tg.closest('.seg') || tg.classList.contains('backlink') || tg.closest('[data-ro]') || safe.indexOf((tg.textContent || '').trim()) >= 0) return;
     ev.stopPropagation(); ev.preventDefault();
     toast(t('proj_view_only'));
@@ -1561,6 +1763,7 @@
     var pn = panel(t('unpaid_suppliers'));
     if (!sb.length) pn.appendChild(el('p', 'muted small', t('no_data')));
     sb.forEach(function (x) { pn.appendChild(kv(x.supplier || t('uncategorized'), money(x.balance), 'neg')); });
+    if (sb.length || p.bills.length) pn.appendChild(btn(t('supplier_stmt'), 'block', function () { pickSupplierStatement(p); }));
     body.appendChild(pn);
 
     if (!p.bills.length) body.appendChild(el('p', 'empty', t('no_bills')));
@@ -1927,6 +2130,7 @@
     pn.appendChild(dateRow);
 
     if (!p.workers.length) pn.appendChild(el('p', 'muted small', t('no_workers')));
+    else pn.appendChild(btn(t('worker_stmt'), 'block', function () { pickWorkerStatement(p, wk); }));
     p.workers.forEach(function (w) {
       var row = p.attendance.filter(function (a) { return a.workerId === w.id && a.date === ui.labourDate; })[0] || null;
       var line = el('div', 'attrow');
@@ -2160,6 +2364,7 @@
     $('date').value = e ? e.date : L.todayStr();
     $('category').value = e ? e.category : '';
     $('note').value = e ? e.note : '';
+    renderCatChips();
     $('deleteEntry').hidden = !e;
     fillContactSel(e ? e.contactId : 0);
     var ms = $('modeSel');
@@ -2708,7 +2913,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.15.0', APP_BUILD = 30;
+  var APP_VERSION = '2.16.0', APP_BUILD = 31;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
