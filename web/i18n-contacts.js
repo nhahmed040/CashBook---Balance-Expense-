@@ -3,6 +3,15 @@
 (function () {
   var add = {
     en: {
+      about_new_9: 'Share a whole project: view only or can edit',
+      proj_view_only: 'This project is view only. Only the owner or editors can change it.',
+      proj_share_title: 'Share this project', proj_share_signin: 'Sign in under Settings → Online to share this project with other people.',
+      proj_share_intro: 'Share this project online so others can see it (view only) or work on it together (can edit). Photos stay on each phone. Costs from your cash books are not part of the share.',
+      proj_share_btn: 'Share this project online', proj_edit_note: 'People who can edit change the BoQ, certificates and bills. If two people change the same certificate or row at once, the later sync keeps its version and you are told.',
+      leave_proj: 'Leave this project', confirm_leave_proj: 'Leave this project? It stays on this phone as your own copy and stops syncing.',
+      confirm_delete_proj_online: 'This project is shared. Deleting it removes the online copy for everyone. Delete it?',
+      confirm_leave_proj_delete: 'Leave this shared project and delete it from this phone?',
+      proj_conflicts: '{n} item(s) were changed by two people; your version was kept.',
       cs_draft: 'Draft', cs_submitted: 'Submitted', cs_approved: 'Approved', cs_paid: 'Paid', cs_change: 'Change status',
       cs_date_submitted: 'Date submitted to the client', cs_date_approved: 'Date approved by the client', cs_date_paid: 'Date paid',
       cn_submitted: 'Submitted {n} days ago, not approved yet', cn_approved: 'Approved {n} days ago, not paid yet', cn_draft: 'Draft for {n} days, not submitted',

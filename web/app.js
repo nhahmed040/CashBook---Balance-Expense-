@@ -356,6 +356,7 @@
         freshId(state.contacts); state.contacts.push(x); break;
       case 'project':
         while (state.projects.some(function (q) { return q.id === x.id; })) x.id = x.id + '_';
+        delete x.sync;
         state.projects.push(x); break;
       case 'book':
         while (state.books.some(function (b) { return b.id === x.id; })) x.id = x.id + '_';
@@ -853,7 +854,7 @@
       var card = el('div', 'pcard');
       card.tabIndex = 0;
       card.setAttribute('role', 'button');
-      card.appendChild(el('h3', null, p.name));
+      card.appendChild(el('h3', null, (window.__projIcon ? window.__projIcon(p) : '') + p.name));
       if (p.client || p.location) card.appendChild(el('div', 'muted small', [p.client, p.location].filter(Boolean).join(' · ')));
       card.appendChild(kv(t('contract_sum'), money(s.contractSum)));
       card.appendChild(kv(t('due_from_client'), money(s.clientOutstanding)));
@@ -883,7 +884,7 @@
     var p = currentProject();
     root.textContent = '';
     root.appendChild(btn(t('back'), 'backlink', function () { ui.projectId = ''; renderProjects(); }));
-    root.appendChild(el('h2', null, p.name));
+    root.appendChild(el('h2', null, (window.__projIcon ? window.__projIcon(p) : '') + p.name));
     var seg = el('div', 'seg');
     SECTIONS.forEach(function (sec) {
       var label = sec === 'books' ? t('books_sec') : t(sec);
@@ -895,6 +896,18 @@
     root.appendChild(body);
     ({ overview: secOverview, boq: secBoq, budget: secBudget, bills: secBills, client: secClient, labour: secLabour, books: secBooks })[ui.section](body, p);
   }
+
+  /* projects shared "view only": block every edit action, keep reading, printing and exporting */
+  document.addEventListener('click', function (ev) {
+    var p = currentProject();
+    if (!p || !p.sync || p.sync.role !== 'view' || !$('projDetail').contains(ev.target)) return;
+    var tg = ev.target.closest && ev.target.closest('button, .boqrow, .pay, input, select, textarea, label, [role=button]');
+    if (!tg) return;
+    var safe = ['print_statement', 'export_report', 'export_boq', 'export_boq_xlsx', 'print', 'export_cert_xlsx'].map(function (k) { return t(k); });
+    if (tg.closest('.seg') || tg.classList.contains('backlink') || tg.closest('[data-ro]') || safe.indexOf((tg.textContent || '').trim()) >= 0) return;
+    ev.stopPropagation(); ev.preventDefault();
+    toast(t('proj_view_only'));
+  }, true);
 
   function panel(title) {
     var p = el('div', 'panel');
@@ -953,15 +966,21 @@
       saveFile('cashbook-project-' + safeName(p.name) + '-' + L.todayStr() + '.csv', 'text/csv', L.projectReportCsv(state, p.id));
     }));
     body.appendChild(row);
+    if (window.__projectSharePanel) body.appendChild(window.__projectSharePanel(p));
     body.appendChild(btn(t('delete'), 'danger block', function () {
+      function proceed() {
+        state.books.forEach(function (b) { if (b.projectId === p.id) b.projectId = ''; });
+        var pph = p.photos.slice();
+        p.bills.forEach(function (b) { pph = pph.concat(b.photos); });
+        var rec = trashPut('project', p.name, p, {}, pph);
+        delete rec.payload.sync;
+        state.projects = state.projects.filter(function (x) { return x.id !== p.id; });
+        ui.projectId = '';
+        save(); renderAll(); undoToast();
+      }
+      if (p.sync && window.__projectRelease) { window.__projectRelease(p).then(function (ok) { if (ok) proceed(); }); return; }
       if (!window.confirm(t('confirm_delete_project'))) return;
-      state.books.forEach(function (b) { if (b.projectId === p.id) b.projectId = ''; });
-      var pph = p.photos.slice();
-      p.bills.forEach(function (b) { pph = pph.concat(b.photos); });
-      trashPut('project', p.name, p, {}, pph);
-      state.projects = state.projects.filter(function (x) { return x.id !== p.id; });
-      ui.projectId = '';
-      save(); renderAll(); undoToast();
+      proceed();
     }));
   }
 
@@ -2500,7 +2519,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.10.0', APP_BUILD = 25;
+  var APP_VERSION = '2.11.0', APP_BUILD = 26;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
@@ -2981,11 +3000,85 @@
         });
       });
     }
+    /* ----- shared projects ----- */
+    var pinfo = {};           // online project id -> { meta, members }
+    var pRoleOpen = 'view', pInvite = '';
+    function linkedProjects() { return state.projects.filter(function (p) { return !!p.sync; }); }
+    function projectRoleOf(data) {
+      var me = cloud.cfg().uid;
+      if (!data || !data.meta) return null;
+      return data.meta.owner === me ? 'owner' : (data.members && data.members[me] && data.members[me].role) || null;
+    }
+    function linkProject(p) {
+      var id = CS.newProjectId();
+      return cloud.createProject(id, p.name).then(function () {
+        p.sync = { id: id, role: 'owner', S: {}, U: {}, last: 0, ix: false, fresh: false, st: 0 };
+        saveRaw();
+      });
+    }
+    function pullProjectIndex() {
+      return cloud.pIndexGet().then(function (idx) {
+        idx = idx || {};
+        var have = {}, added = false;
+        state.projects.forEach(function (p) { if (p.sync) have[p.sync.id] = 1; });
+        var chain = Promise.resolve();
+        Object.keys(idx).filter(function (id) { return !have[id]; }).forEach(function (id) {
+          chain = chain.then(function () {
+            return cloud.getProject(id).catch(function (e) { if (e && e.code === 'permission') return null; throw e; }).then(function (data) {
+              var role = projectRoleOf(data);
+              if (!role) return cloud.pIndexDelete(id);
+              pinfo[id] = { meta: data.meta, members: data.members || {} };
+              var np = L.sanitizeProject({ id: 'p' + L.newId(), name: String(data.meta.name || 'Project').slice(0, 60), boqLines: 2 }, 1);
+              np.sync = { id: id, role: role, S: {}, U: {}, last: 0, ix: true, fresh: true, st: 0 };
+              state.projects.push(np); added = true;
+            });
+          });
+        });
+        return chain.then(function () { if (added) saveRaw(); return added; });
+      });
+    }
+    function syncProject(p) {
+      var sy = p.sync, startRev = rev;
+      var recs = sy.fresh ? {} : L.projectRecords(p);
+      var dirty = Object.keys(recs).some(function (k) { return sy.S[k] !== CS.rsig(recs[k]); }) ||
+        Object.keys(sy.S).some(function (k) { return sy.S[k] !== '-' && !(k in recs); });
+      if (sy.fresh) dirty = true;
+      return cloud.getProjectStamp(sy.id).catch(function (e) {
+        if (e && e.code === 'permission') return null;
+        throw e;
+      }).then(function (stamp) {
+        if (stamp === null) {
+          // either no stamp yet (nothing pushed) or no access: ask for the whole project to find out
+          if (!sy.ix && !dirty) return { changed: false };
+        }
+        if (stamp != null && !dirty && sy.ix && stamp === sy.st) return { changed: false };
+        return cloud.getProject(sy.id).catch(function (e) { if (e && e.code === 'permission') return null; throw e; }).then(function (data) {
+          var role = projectRoleOf(data);
+          if (!role) return { gone: true };
+          pinfo[sy.id] = { meta: data.meta, members: data.members || {} };
+          var r = CS.mergeRecs({ local: recs, S: sy.S, U: sy.U, remote: data.rec || null, canWrite: role !== 'view', now: Date.now() });
+          var chain = cloud.pushRecs(sy.id, r.push), pushed = Object.keys(r.push).length > 0;
+          if (!sy.ix) chain = chain.then(function () { return cloud.pIndexPut(sy.id, p.name, role); });
+          return chain.then(function () {
+            if (rev !== startRev) { again = true; return { changed: false }; }
+            if (r.changed || sy.fresh) L.applyProjectRecords(p, r.merged);
+            var after = L.projectRecords(p), S = {};
+            Object.keys(after).forEach(function (k) { S[k] = CS.rsig(after[k]); });
+            Object.keys(r.U).forEach(function (k) { if (!(k in after)) S[k] = '-'; });
+            var sy2 = p.sync;
+            sy2.S = S; sy2.U = r.U; sy2.role = role; sy2.last = Date.now(); sy2.ix = true; sy2.fresh = false;
+            sy2.st = pushed ? 0 : (Number(data.stamp) || 0);
+            if (r.conflicts) toast(t('proj_conflicts', { n: r.conflicts }));
+            return { changed: r.changed || role !== sy.role };
+          });
+        });
+      });
+    }
     function syncAll(manual) {
       if (!ready()) { if (manual) toast(t('need_signin')); return Promise.resolve(); }
       if (busy) { again = true; return Promise.resolve(); }
       busy = true; again = false; dot('busy');
-      var changed = false;
+      var changed = false, projFail = '';
       return pullIndex().then(function (added) {
         if (added) changed = true;
         return ensureLinked();
@@ -3003,7 +3096,21 @@
         });
         return chain;
       }).then(function () {
-        busy = false; status = t('synced'); dot('ok');
+        return pullProjectIndex().then(function (added) { if (added) changed = true; });
+      }).then(function () {
+        var chain = Promise.resolve();
+        linkedProjects().forEach(function (p) {
+          chain = chain.then(function () { return syncProject(p); }).then(function (r) {
+            if (r.gone) {
+              toast(t('sync_gone', { n: p.name }));
+              var gid = p.sync.id; delete p.sync; changed = true;
+              cloud.pIndexDelete(gid).catch(function () { /* ignore */ });
+            } else if (r.changed) changed = true;
+          }, function (e) { if (e && e.code === 'network') throw e; projFail = errText(e); });
+        });
+        return chain;
+      }).then(function () {
+        busy = false; status = projFail || t('synced'); dot(projFail ? 'err' : 'ok');
         saveRaw();
         if (changed) renderAll(); else renderCloud();
         if (manual) toast(t('synced'));
@@ -3034,6 +3141,7 @@
       var copy = JSON.parse(JSON.stringify(state));
       delete copy.settings.pinHash; delete copy.settings.pinSalt;
       copy.books.forEach(function (b) { delete b.sync; delete b.nolink; });
+      copy.projects.forEach(function (p) { delete p.sync; });
       return JSON.stringify(copy);
     }
     function backupNow(quiet) {
@@ -3066,6 +3174,7 @@
       var p = CS.parseShare(text);
       if (!p) { toast(t('bad_code')); return; }
       if (!ready()) { toast(t('need_signin')); return; }
+      if (p.bookId.indexOf('sp') === 0) { joinProjectCode(p); return; }
       if (state.books.some(function (b) { return b.sync && b.sync.id === p.bookId; })) { toast(t('already_joined')); return; }
       cloud.join(p.bookId, p.code, p.role).then(function () { return cloud.getBook(p.bookId); }).then(function (data) {
         if (!data || !data.meta) throw { code: 'permission' };
@@ -3076,6 +3185,108 @@
         return syncAll(false);
       }).then(function () { renderAll(); }).catch(function (e) { fail(e && e.code ? e : { code: 'permission' }); });
     }
+    function joinProjectCode(p) {
+      if (state.projects.some(function (x) { return x.sync && x.sync.id === p.bookId; })) { toast(t('already_joined')); return; }
+      cloud.joinProject(p.bookId, p.code, p.role).then(function () { return cloud.getProject(p.bookId); }).then(function (data) {
+        if (!data || !data.meta) throw { code: 'permission' };
+        var np = L.sanitizeProject({ id: 'p' + L.newId(), name: String(data.meta.name || 'Project').slice(0, 60), boqLines: 2 }, 1);
+        np.sync = { id: p.bookId, role: p.role, S: {}, U: {}, last: 0, ix: false, fresh: true, st: 0 };
+        state.projects.push(np);
+        save(); toast(t('joined', { n: np.name }));
+        return syncAll(false);
+      }).then(function () { renderAll(); }).catch(function (e) { fail(e && e.code ? e : { code: 'permission' }); });
+    }
+    /* deleting a shared project: the owner removes the online copy, a member just leaves */
+    window.__projectRelease = function (p) {
+      var owner = p.sync.role === 'owner';
+      if (!window.confirm(t(owner ? 'confirm_delete_proj_online' : 'confirm_leave_proj_delete'))) return Promise.resolve(false);
+      if (!ready()) { toast(t('need_signin')); return Promise.resolve(false); }
+      var id = p.sync.id, me = cloud.cfg().uid;
+      return (owner ? cloud.deleteProject(id) : cloud.removePMember(id, me, false)).then(function () { return cloud.pIndexDelete(id); }).then(function () { return true; }, function (e) { fail(e); return false; });
+    };
+    function leaveProject(p) {
+      if (!window.confirm(t('confirm_leave_proj'))) return;
+      var id = p.sync.id, me = cloud.cfg().uid;
+      cloud.removePMember(id, me, false).then(function () { return cloud.pIndexDelete(id); }).then(function () {
+        delete p.sync; save(); renderAll();
+      }, fail);
+    }
+    window.__projIcon = function (p) {
+      if (!p.sync) return '';
+      if (p.sync.role === 'view') return '👁 ';
+      if (p.sync.role === 'edit') return '👥 ';
+      var i = pinfo[p.sync.id];
+      return i && Object.keys(i.members || {}).length ? '👥 ' : '☁️ ';
+    };
+    /* the "share this project" panel shown on the project overview */
+    window.__projectSharePanel = function (p) {
+      var P = panel(t('proj_share_title'));
+      P.setAttribute('data-ro', '1');
+      if (!ready()) { P.appendChild(el('p', 'muted small', t('proj_share_signin'))); return P; }
+      if (!p.sync) {
+        P.appendChild(el('p', 'muted small', t('proj_share_intro')));
+        P.appendChild(btn(t('proj_share_btn'), 'block', function () {
+          linkProject(p).then(function () { return syncAll(true); }).then(function () { renderAll(); }, fail);
+        }));
+        return P;
+      }
+      var sy = p.sync, inf = pinfo[sy.id];
+      P.appendChild(el('p', 'muted small', t('sharing_on', { r: roleName(sy.role) }) + ' · ' + t('last_sync', { t: stamp(sy.last) })));
+      P.appendChild(btn(t('sync_now'), 'block', function () { syncAll(true); }));
+      if (sy.role === 'view') {
+        P.appendChild(el('p', 'muted small', t('proj_view_only')));
+        P.appendChild(btn(t('leave_proj'), 'block danger', function () { leaveProject(p); }));
+      } else if (sy.role === 'edit') {
+        P.appendChild(el('p', 'muted small', t('proj_edit_note')));
+        P.appendChild(btn(t('leave_proj'), 'block danger', function () { leaveProject(p); }));
+      }
+      if (sy.role === 'owner') {
+        P.appendChild(el('p', 'muted small', t('proj_edit_note')));
+        var ir = el('label', 'field'); ir.appendChild(el('span', null, t('invite_as')));
+        var rs = document.createElement('select');
+        rs.appendChild(option('view', t('role_view'))); rs.appendChild(option('edit', t('role_edit')));
+        rs.value = pRoleOpen; rs.addEventListener('change', function () { pRoleOpen = this.value; });
+        ir.appendChild(rs); P.appendChild(ir);
+        function rerender() { renderProjects(); }
+        P.appendChild(btn(t('make_invite'), 'block', function () {
+          cloud.createPInvite(sy.id, pRoleOpen).then(function (code) { pInvite = sy.id + '.' + code; rerender(); }).catch(fail);
+        }));
+        if (pInvite && pInvite.indexOf(sy.id) === 0) {
+          P.appendChild(el('p', 'muted small', t('invite_text')));
+          var box = document.createElement('input'); box.type = 'text'; box.readOnly = true; box.value = pInvite; box.className = 'code';
+          P.appendChild(box);
+          P.appendChild(btn(t('copy'), 'block', function () {
+            box.select();
+            try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(pInvite); else document.execCommand('copy'); toast(t('copied')); } catch (e) { /* by hand */ }
+          }));
+        }
+        P.appendChild(btn(t('revoke_invites'), 'block', function () {
+          if (!window.confirm(t('cf_revoke', { name: p.name }))) return;
+          cloud.revokePInvites(sy.id).then(function () { pInvite = ''; toast(t('invites_revoked')); rerender(); }, fail);
+        }));
+        if (inf) {
+          var uids = Object.keys(inf.members || {});
+          if (uids.length) P.appendChild(el('h3', null, t('members')));
+          uids.forEach(function (uid) {
+            var m = inf.members[uid], r2 = el('div', 'member');
+            r2.appendChild(el('span', 'mname', m.name ? m.name + ' (' + (m.email || '') + ')' : (m.email || uid)));
+            var acts = el('div', 'acts');
+            var sel = document.createElement('select');
+            sel.appendChild(option('view', t('role_view'))); sel.appendChild(option('edit', t('role_edit'))); sel.value = m.role;
+            sel.addEventListener('change', function () { cloud.setPRole(sy.id, uid, this.value).then(function () { m.role = sel.value; }, fail); });
+            acts.appendChild(sel);
+            acts.appendChild(btn(t('remove'), 'danger', function () {
+              if (!window.confirm(t('cf_remove_member', { name: m.name || m.email || uid, book: p.name }))) return;
+              cloud.removePMember(sy.id, uid, true).then(function () { delete inf.members[uid]; rerender(); }, fail);
+            }));
+            r2.appendChild(acts);
+            P.appendChild(r2);
+          });
+        }
+      }
+      return P;
+    };
+
     function leaveBook(b) {
       if (!window.confirm(t('confirm_leave'))) return;
       var id = b.sync.id, me = cloud.cfg().uid;

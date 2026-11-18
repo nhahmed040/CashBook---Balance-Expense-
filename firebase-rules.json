@@ -18,6 +18,36 @@
         ".write": "auth != null && root.child('books/'+$b+'/meta/owner').val() === auth.uid"
       }
     },
+    "pinvites": {
+      "$p": {
+        ".read": "auth != null && root.child('projects/'+$p+'/meta/owner').val() === auth.uid",
+        ".write": "auth != null && root.child('projects/'+$p+'/meta/owner').val() === auth.uid"
+      }
+    },
+    "projects": {
+      "$p": {
+        ".read": "auth != null && (data.child('meta/owner').val() === auth.uid || data.child('members/'+auth.uid+'/role').exists())",
+        ".write": "auth != null && data.child('meta/owner').val() === auth.uid",
+        "meta": {
+          ".write": "auth != null && ((!data.exists() && newData.child('owner').val() === auth.uid) || data.child('owner').val() === auth.uid)",
+          ".validate": "!data.exists() || newData.child('owner').val() === data.child('owner').val()"
+        },
+        "members": {
+          "$u": {
+            ".write": "auth != null && (root.child('projects/'+$p+'/meta/owner').val() === auth.uid || ($u === auth.uid && !newData.exists()) || ($u === auth.uid && !data.exists() && root.child('pinvites/'+$p+'/'+newData.child('code').val()).val() === newData.child('role').val()))",
+            ".validate": "newData.hasChildren(['role']) && (newData.child('role').val() === 'edit' || newData.child('role').val() === 'view')"
+          }
+        },
+        "stamp": {
+          ".write": "auth != null && (root.child('projects/'+$p+'/meta/owner').val() === auth.uid || root.child('projects/'+$p+'/members/'+auth.uid+'/role').val() === 'edit')"
+        },
+        "rec": {
+          "$k": {
+            ".write": "auth != null && (root.child('projects/'+$p+'/meta/owner').val() === auth.uid || root.child('projects/'+$p+'/members/'+auth.uid+'/role').val() === 'edit')"
+          }
+        }
+      }
+    },
     "books": {
       "$b": {
         ".read": "auth != null && (data.child('meta/owner').val() === auth.uid || data.child('members/'+auth.uid+'/role').exists())",

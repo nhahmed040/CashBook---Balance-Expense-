@@ -96,6 +96,15 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Share a project (2.11)
+
+- On a project's **Overview**, **Share this project online** (you must be signed in under Settings → Online). Then **Create invite code** as **View only** or **Can edit** and send the code. The other person pastes it in Settings → Online → *Join*.
+- **View only**: sees the BoQ, certificates, bills, labour and balances live; editing buttons are blocked. Print and Excel/CSV export still work.
+- **Can edit**: changes BoQ rows, certificates, bills and workers. Every BoQ row, certificate, bill and worker is merged separately. If two people change the very same item between two syncs, the one who syncs later keeps their version and is told.
+- Photos stay on each phone. Costs from cash books are not part of the share (share the books too if needed).
+- Deleting a shared project as owner removes the online copy for everyone; a member who deletes it just leaves.
+- **Update the database rules once**: replace the Realtime Database rules with the new `firebase-rules.json` and Publish. Without it, sharing a project shows a permission error (books keep working).
+
 ## Certificate status and follow-up (2.10)
 
 - Every certificate has a status chip: **Draft → Submitted → Approved → Paid**. Tap **Change status** and enter the date. Certificates without a status are shown as Paid when fully received, otherwise Draft.

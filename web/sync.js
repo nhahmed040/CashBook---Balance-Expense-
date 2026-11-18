@@ -127,6 +127,57 @@
     for (i = 0; i < n; i++) out += alphabet.charAt(buf[i] % alphabet.length);
     return out;
   }
+  /* ---------- shared projects: records merged one by one ----------
+     A project is split into records (info, boq order, one per BoQ row / certificate / bill / worker / attendance).
+     Every online record is { u: time of the edit, d: the record as JSON text } or { u, x: 1 } when it was deleted. */
+  function stable(o) {
+    if (o === null || typeof o !== 'object') return JSON.stringify(o);
+    if (Array.isArray(o)) return '[' + o.map(stable).join(',') + ']';
+    return '{' + Object.keys(o).sort().map(function (k) { return JSON.stringify(k) + ':' + stable(o[k]); }).join(',') + '}';
+  }
+  function rsig(o) { return hash(stable(o)); }
+  /* a: { local: {key: record}, S: {key: signature at the last sync, '-' = absent}, U: {key: online time last seen},
+          remote: {key: {u, d|x}} | null, canWrite, now }
+     -> { merged: {key: record}, S, U, push: {key: {u, d|x}}, changed, conflicts } */
+  function mergeRecs(a) {
+    var local = a.local || {}, remote = a.remote || {}, S0 = a.S || {}, U0 = a.U || {};
+    var merged = {}, S = {}, U = {}, push = {}, changed = false, conflicts = 0, seen = {};
+    Object.keys(local).concat(Object.keys(remote), Object.keys(S0)).forEach(function (key) {
+      if (seen[key]) return;
+      seen[key] = true;
+      var L = local[key], ls = L === undefined ? '-' : rsig(L);
+      var has = Object.prototype.hasOwnProperty.call(S0, key), base = has ? S0[key] : (L === undefined ? '-' : null);
+      var localChanged = ls !== base;
+      var R = remote[key], ru = R ? Number(R.u) || 0 : 0, lu = U0[key] || 0;
+      var remoteNew = !!R && ru > lu;
+      function takeRemote() {
+        var rec;
+        if (R && !R.x) { try { rec = JSON.parse(R.d); } catch (e) { rec = undefined; } }
+        if (rec && typeof rec === 'object') {
+          if (ls === '-' || rsig(rec) !== ls) changed = true;
+          merged[key] = rec; U[key] = ru;
+        } else {
+          if (L !== undefined) changed = true;
+          U[key] = ru;
+        }
+      }
+      if (localChanged && !a.canWrite) { takeRemote(); return; }                 // view only: this phone's edits are dropped
+      if (localChanged) {
+        if (remoteNew) conflicts++;
+        push[key] = L === undefined ? { u: a.now, x: 1 } : { u: a.now, d: JSON.stringify(L) };
+        if (L !== undefined) merged[key] = L;
+        U[key] = a.now;
+        return;
+      }
+      if (remoteNew) { takeRemote(); return; }
+      if (L !== undefined) merged[key] = L;
+      if (U0[key]) U[key] = U0[key];
+    });
+    Object.keys(merged).forEach(function (k) { S[k] = rsig(merged[k]); });
+    Object.keys(U).forEach(function (k) { if (merged[k] === undefined) S[k] = '-'; });
+    return { merged: merged, S: S, U: U, push: push, changed: changed, conflicts: conflicts };
+  }
+  function newProjectId() { return 'sp' + randomString(12, 'abcdefghjkmnpqrstuvwxyz23456789'); }
   function newBookId() { return 'sb' + randomString(12, 'abcdefghjkmnpqrstuvwxyz23456789'); }
   function newInviteCode(role) { return (role === 'edit' ? 'E' : 'V') + randomString(7, CODE_ALPHABET.replace(/[EV]/g, '')); }
   function parseShare(text) {
@@ -266,7 +317,53 @@
     function removeMember(id, uid) { return db('DELETE', 'books/' + id + '/members/' + uid); }
     function deleteBook(id) { return db('DELETE', 'invites/' + id).then(function () { return db('DELETE', 'books/' + id); }); }   // invites first: their rule needs the book's owner
 
+    /* shared projects */
+    function createProject(id, name) {
+      var me = cfg(), pr = me.profile || {};
+      return db('PUT', 'projects/' + id + '/meta', { owner: me.uid, ownerEmail: me.email || '', ownerName: pr.name || '', name: name, created: now() });
+    }
+    function getProjectStamp(id) { return db('GET', 'projects/' + id + '/stamp'); }
+    function getProject(id) { return db('GET', 'projects/' + id); }
+    function pushRecs(id, map) {
+      var keys = Object.keys(map), chain = Promise.resolve(false), i;
+      if (!keys.length) return Promise.resolve(false);
+      for (i = 0; i < keys.length; i += 400) {
+        (function (part, last) {
+          chain = chain.then(function () {
+            var upd = {};
+            part.forEach(function (k) { upd['rec/' + k] = map[k]; });
+            if (last) upd.stamp = now();
+            return db('PATCH', 'projects/' + id, upd);
+          });
+        })(keys.slice(i, i + 400), i + 400 >= keys.length);
+      }
+      return chain.then(function () { return true; });
+    }
+    function bumpProject(id) { return db('PUT', 'projects/' + id + '/stamp', now()); }
+    function pIndexPut(id, name, role) { return db('PUT', 'users/' + cfg().uid + '/projects/' + id, { name: String(name).slice(0, 60), role: role }); }
+    function pIndexGet() { return db('GET', 'users/' + cfg().uid + '/projects'); }
+    function pIndexDelete(id) { return db('DELETE', 'users/' + cfg().uid + '/projects/' + id); }
+    function createPInvite(id, role) {
+      var code = newInviteCode(role);
+      return db('PUT', 'pinvites/' + id + '/' + code, role === 'edit' ? 'edit' : 'view').then(function () { return code; });
+    }
+    function revokePInvites(id) { return db('DELETE', 'pinvites/' + id); }
+    function joinProject(id, code, role) {
+      var me = cfg();
+      return db('PUT', 'projects/' + id + '/members/' + me.uid, { role: role, code: code, email: me.email || '', name: (me.profile && me.profile.name) || '' });
+    }
+    function setPRole(id, uid, role) {
+      return db('PUT', 'projects/' + id + '/members/' + uid + '/role', role === 'edit' ? 'edit' : 'view').then(function () { return bumpProject(id); });
+    }
+    function removePMember(id, uid, isOwner) {
+      return db('DELETE', 'projects/' + id + '/members/' + uid).then(function () { return isOwner ? bumpProject(id) : null; });
+    }
+    function deleteProject(id) { return db('DELETE', 'pinvites/' + id).then(function () { return db('DELETE', 'projects/' + id); }); }
+
     return {
+      createProject: createProject, getProjectStamp: getProjectStamp, getProject: getProject, pushRecs: pushRecs, bumpProject: bumpProject,
+      pIndexPut: pIndexPut, pIndexGet: pIndexGet, pIndexDelete: pIndexDelete, createPInvite: createPInvite, revokePInvites: revokePInvites,
+      joinProject: joinProject, setPRole: setPRole, removePMember: removePMember, deleteProject: deleteProject,
       cfg: cfg, patchCfg: patchCfg, signUp: signUp, signIn: signIn, signInGoogle: signInGoogle, signOut: signOut, signedIn: signedIn,
       backupPut: backupPut, backupGet: backupGet,
       createBook: createBook, setBookName: setBookName, profilePut: profilePut, profileGet: profileGet,
@@ -284,6 +381,28 @@
       invites: { '$b': {
         '.read': "auth != null && root.child('books/'+$b+'/meta/owner').val() === auth.uid",
         '.write': "auth != null && root.child('books/'+$b+'/meta/owner').val() === auth.uid"
+      } },
+      pinvites: { '$p': {
+        '.read': "auth != null && root.child('projects/'+$p+'/meta/owner').val() === auth.uid",
+        '.write': "auth != null && root.child('projects/'+$p+'/meta/owner').val() === auth.uid"
+      } },
+      projects: { '$p': {
+        '.read': "auth != null && (data.child('meta/owner').val() === auth.uid || data.child('members/'+auth.uid+'/role').exists())",
+        '.write': "auth != null && data.child('meta/owner').val() === auth.uid",
+        meta: {
+          '.write': "auth != null && ((!data.exists() && newData.child('owner').val() === auth.uid) || data.child('owner').val() === auth.uid)",
+          '.validate': "!data.exists() || newData.child('owner').val() === data.child('owner').val()"
+        },
+        members: { '$u': {
+          '.write': "auth != null && (root.child('projects/'+$p+'/meta/owner').val() === auth.uid || ($u === auth.uid && !newData.exists()) || ($u === auth.uid && !data.exists() && root.child('pinvites/'+$p+'/'+newData.child('code').val()).val() === newData.child('role').val()))",
+          '.validate': "newData.hasChildren(['role']) && (newData.child('role').val() === 'edit' || newData.child('role').val() === 'view')"
+        } },
+        stamp: {
+          '.write': "auth != null && (root.child('projects/'+$p+'/meta/owner').val() === auth.uid || root.child('projects/'+$p+'/members/'+auth.uid+'/role').val() === 'edit')"
+        },
+        rec: { '$k': {
+          '.write': "auth != null && (root.child('projects/'+$p+'/meta/owner').val() === auth.uid || root.child('projects/'+$p+'/members/'+auth.uid+'/role').val() === 'edit')"
+        } }
       } },
       books: { '$b': {
         '.read': "auth != null && (data.child('meta/owner').val() === auth.uid || data.child('members/'+auth.uid+'/role').exists())",
@@ -304,7 +423,7 @@
   };
 
   return {
-    sig: sig, pack: pack, merge: merge, FIELDS: FIELDS, RULES: RULES,
+    sig: sig, pack: pack, merge: merge, mergeRecs: mergeRecs, rsig: rsig, newProjectId: newProjectId, FIELDS: FIELDS, RULES: RULES,
     createCloud: createCloud, cleanDbUrl: cleanDbUrl, newBookId: newBookId, newInviteCode: newInviteCode, parseShare: parseShare
   };
 });

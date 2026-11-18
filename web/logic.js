@@ -287,7 +287,7 @@
       if (wIds[a.workerId]) attMap[a.date + '|' + a.workerId] = a;
     });
     var adv = advanceOf(p);
-    return {
+    var out = {
       id: str(p.id, 40) || ('p' + newId()),
       name: str(p.name, 60) || ('Project ' + n),
       client: str(p.client, 60),
@@ -314,6 +314,71 @@
       boqLines: 2,
       photos: photoIds(p.photos)
     };
+    var psy = sanitizeProjSync(p.sync);
+    if (psy) out.sync = psy;
+    return out;
+  }
+
+  /* ---------- shared projects: the project as separate records ---------- */
+  function sanitizeProjSync(x) {
+    if (!x || typeof x !== 'object' || !/^[a-z0-9]{6,20}$/.test(String(x.id || ''))) return undefined;
+    function map(m, isNum) {
+      var out = {}, n = 0;
+      if (m && typeof m === 'object') Object.keys(m).forEach(function (k) {
+        if (n < 60000 && /^(info|ord|[bclwa]\d{1,20})$/.test(k) && (isNum ? typeof m[k] === 'number' && isFinite(m[k]) : typeof m[k] === 'string' && m[k].length < 20)) { out[k] = m[k]; n++; }
+      });
+      return out;
+    }
+    return {
+      id: x.id, role: x.role === 'owner' || x.role === 'edit' ? x.role : 'view',
+      S: map(x.S, false), U: map(x.U, true),
+      last: typeof x.last === 'number' && isFinite(x.last) ? x.last : 0,
+      ix: x.ix === true, fresh: x.fresh === true,
+      st: typeof x.st === 'number' && isFinite(x.st) ? x.st : 0
+    };
+  }
+  var REC_LISTS = { b: 'boq', c: 'certs', l: 'bills', w: 'workers', a: 'attendance' };
+  /* key -> record. Photos stay on the phone (they are not shared). */
+  function projectRecords(p) {
+    var recs = {}, info = {};
+    Object.keys(p).forEach(function (k) {
+      if (k === 'id' || k === 'sync' || k === 'photos' || k === 'boqLines' || Array.isArray(p[k])) return;
+      info[k] = p[k];
+    });
+    recs.info = JSON.parse(JSON.stringify(info));
+    recs.ord = { ids: p.boq.map(function (i) { return i.id; }) };
+    Object.keys(REC_LISTS).forEach(function (pre) {
+      (p[REC_LISTS[pre]] || []).forEach(function (x) {
+        var c = JSON.parse(JSON.stringify(x));
+        delete c.photos;
+        recs[pre + x.id] = c;
+      });
+    });
+    return recs;
+  }
+  /* put merged records back into p (in place). Returns p. */
+  function applyProjectRecords(p, merged) {
+    var lists = { boq: [], certs: [], bills: [], workers: [], attendance: [] }, ord = (merged.ord && merged.ord.ids) || [], pos = {};
+    ord.forEach(function (id, i) { pos[id] = i; });
+    var localBills = {};
+    p.bills.forEach(function (b) { localBills[b.id] = b; });
+    Object.keys(merged).forEach(function (k) {
+      var pre = k.charAt(0), list = REC_LISTS[pre];
+      if (!list || k === 'info' || k === 'ord' || !/^[bclwa]\d+$/.test(k)) return;
+      var rec = JSON.parse(JSON.stringify(merged[k]));
+      if (pre === 'l' && localBills[rec.id]) rec.photos = localBills[rec.id].photos;
+      lists[list].push(rec);
+    });
+    lists.boq.sort(function (x, y) {
+      var px = pos[x.id] == null ? 1e9 : pos[x.id], py = pos[y.id] == null ? 1e9 : pos[y.id];
+      return px - py || x.id - y.id;
+    });
+    ['certs', 'bills', 'workers', 'attendance'].forEach(function (l) { lists[l].sort(function (x, y) { return x.id - y.id; }); });
+    var raw = Object.assign({}, merged.info || {}, lists, { id: p.id, boqLines: 2, photos: p.photos, sync: p.sync });
+    var clean = sanitizeProject(raw, 1);
+    Object.keys(p).forEach(function (k) { delete p[k]; });
+    Object.assign(p, clean);
+    return p;
   }
 
   /* ---------- whole state ---------- */
@@ -1219,7 +1284,7 @@
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
     boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
-    boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, CERT_STATUSES: CERT_STATUSES, certStatus: certStatus, photoIds: photoIds,
+    boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, projectRecords: projectRecords, applyProjectRecords: applyProjectRecords, sanitizeProjSync: sanitizeProjSync, CERT_STATUSES: CERT_STATUSES, certStatus: certStatus, photoIds: photoIds,
     TRASH_DAYS: TRASH_DAYS, sanitizeTrash: sanitizeTrash, trashPhotoIds: trashPhotoIds, trashRestoreItem: trashRestoreItem
   };
 });
