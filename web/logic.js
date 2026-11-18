@@ -1127,7 +1127,7 @@
         if (!h) return;
         if (/^(description|descr|particulars|work description|item description)/i.test(h)) { if (cur.desc < 0) cur.desc = pos; }
         else if (/^(unit|uom|u\/m)\.?$/i.test(h)) { if (cur.unit < 0) cur.unit = pos; }
-        else if (/^(qty|quantity)\.?$/i.test(h)) { if (cur.qty < 0) cur.qty = pos; }
+        else if (/^(total\s+|contract\s+|bill\s+)?(qty|quantity)\.?$/i.test(h)) { if (cur.qty < 0) cur.qty = pos; }
         else if (/^(unit )?(rate|price)/i.test(h)) { if (cur.rate < 0) cur.rate = pos; }
         else if (/^(item( no\.?)?|no\.?|ref\.?|code|s\/n|sn)$/i.test(h)) { if (cur.no < 0) cur.no = pos; }
       });
@@ -1157,14 +1157,16 @@
       if (!desc) { desc = no; no = ''; }
       var low = desc.toLowerCase();
       var it = null, kind;
-      if (/^total\s+carried\s+to\s+summary/.test(low) || /^total\s+to\s+summary/.test(low) || /^carried\s+to\s+summary/.test(low)) {
-        kind = 'sum'; it = { kind: 'sum', desc: desc.replace(/[:\s]+$/, '') };
+      if (/carried\s+to\s+summary|^(sub\s*-?\s*)?total\s+(to\s+)?summary/.test(low)) {
+        kind = 'sum'; it = { kind: 'sum', desc: desc.replace(/\.{2,}.*$/, '').replace(/[:.\s]+$/, '') };
       } else if (/^(grand\s+total|total\b|sub\s*-?\s*total|vat\b|\d+\s*%\s*vat|contingenc)/.test(low) && !(qty > 0 && rate > 0)) {
         skipped++; continue;
       } else if (qty > 0 && rate > 0) {
         kind = 'item'; it = { no: no, desc: desc, unit: unit, qty: qty, rate: rate };
       } else if (!no && !unit && /^[A-Z]\s*[.)]\s+\S/.test(desc)) {
         kind = 'group'; it = { kind: 'group', desc: desc };
+      } else if (/^\d{1,2}\s*\.?$/.test(no) && !unit && !(qty > 0) && !(rate > 0)) {
+        kind = 'line'; it = { kind: 'line', desc: no.replace(/\.$/, '') + '. ' + desc };
       } else if (!no && !unit && /^\d{1,2}\s*[.)]\s*\S/.test(desc) && !/^\d{1,2}\s*[.)]\s*\d/.test(desc)) {
         kind = 'line'; it = { kind: 'line', desc: desc };
       } else {
