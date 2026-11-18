@@ -3,6 +3,7 @@
 (function () {
   var add = {
     en: {
+      take_photo: 'Take a photo', choose_photo: 'Choose from gallery', calculator: 'Calculator', use_result: 'Use result', calc_bad: 'This calculation is not complete.',
       about_new_9: 'Share a whole project: view only or can edit',
       proj_view_only: 'This project is view only. Only the owner or editors can change it.',
       proj_share_title: 'Share this project', proj_share_signin: 'Sign in under Settings → Online to share this project with other people.',

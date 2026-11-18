@@ -5,7 +5,11 @@ import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.ClipData;
 import android.content.Intent;
+import android.provider.MediaStore;
+import androidx.core.content.FileProvider;
+import java.io.File;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -109,6 +113,9 @@ public class MainActivity extends Activity {
                     filePathCallback.onReceiveValue(null);
                 }
                 filePathCallback = callback;
+                if (params != null && params.isCaptureEnabled() && launchCamera()) {
+                    return true;
+                }
                 try {
                     // Photos ask for "image/*"; the restore/import pickers use file extensions, so any file.
                     String type = "*/*";
@@ -133,6 +140,28 @@ public class MainActivity extends Activity {
     }
 
     private static final int REQ_PICK_CONTACT = 9102;
+    private static final int REQ_CAMERA = 9103;
+    private Uri cameraUri;
+
+    /** Opens the camera app and gives the picture back to the page's file input. */
+    private boolean launchCamera() {
+        try {
+            File dir = new File(getCacheDir(), "camera");
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+            File file = File.createTempFile("photo_", ".jpg", dir);
+            cameraUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
+            Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            i.putExtra(MediaStore.EXTRA_OUTPUT, cameraUri);
+            i.setClipData(ClipData.newRawUri("", cameraUri));
+            i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(i, REQ_CAMERA);
+            return true;
+        } catch (Exception e) {
+            cameraUri = null;
+            return false;
+        }
+    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -154,6 +183,13 @@ public class MainActivity extends Activity {
             final String js = "window.__onPhoneContact && window.__onPhoneContact(" + JSONObject.quote(name) + "," + JSONObject.quote(phone) + ")";
             if (web != null) {
                 web.evaluateJavascript(js, null);
+            }
+            return;
+        }
+        if (requestCode == REQ_CAMERA) {
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(resultCode == RESULT_OK && cameraUri != null ? new Uri[]{cameraUri} : null);
+                filePathCallback = null;
             }
             return;
         }

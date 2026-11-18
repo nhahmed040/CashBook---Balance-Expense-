@@ -1265,7 +1265,56 @@
     return { items: items.slice(0, 3000), counts: counts, skipped: skipped, headerRow: head + 1 };
   }
 
+  /* Calculator: + - * / (also x, ×, ÷, −), brackets, decimals, unary minus, and "%" after a number. NaN when it does not make sense. */
+  function calcEval(text) {
+    var src = String(text == null ? '' : text).replace(/×|x|X/g, '*').replace(/÷/g, '/').replace(/−|–/g, '-').replace(/,/g, '').replace(/\s+/g, '');
+    var i = 0;
+    if (!src || src.length > 200 || /[^0-9+\-*\/().%]/.test(src)) return NaN;
+    function num() {
+      var m = /^(\d+\.?\d*|\.\d+)/.exec(src.slice(i));
+      if (!m) return NaN;
+      i += m[1].length;
+      var v = parseFloat(m[1]);
+      while (src.charAt(i) === '%') { v = v / 100; i++; }
+      return v;
+    }
+    function factor() {
+      var c = src.charAt(i);
+      if (c === '-') { i++; return -factor(); }
+      if (c === '+') { i++; return factor(); }
+      if (c === '(') {
+        i++;
+        var v = expr();
+        if (src.charAt(i) !== ')') return NaN;
+        i++;
+        while (src.charAt(i) === '%') { v = v / 100; i++; }
+        return v;
+      }
+      return num();
+    }
+    function term() {
+      var v = factor();
+      while (i < src.length && (src.charAt(i) === '*' || src.charAt(i) === '/')) {
+        var op = src.charAt(i++), r = factor();
+        v = op === '*' ? v * r : v / r;
+      }
+      return v;
+    }
+    function expr() {
+      var v = term();
+      while (i < src.length && (src.charAt(i) === '+' || src.charAt(i) === '-')) {
+        var op = src.charAt(i++), r = term();
+        v = op === '+' ? v + r : v - r;
+      }
+      return v;
+    }
+    var out = expr();
+    if (i !== src.length || !isFinite(out)) return NaN;
+    return Math.round(out * 1e8) / 1e8;
+  }
+
   return {
+    calcEval: calcEval,
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,
     sanitizeContact: sanitizeContact, sanitizeBusiness: sanitizeBusiness, contactBalances: contactBalances,
     rangeEntries: rangeEntries, reminders: reminders,

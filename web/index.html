@@ -235,7 +235,10 @@
         <label><input type="radio" name="type" value="in" checked><span data-i18n="cash_in">Cash in</span></label>
         <label><input type="radio" name="type" value="out"><span data-i18n="cash_out">Cash out</span></label>
       </div>
-      <input type="number" id="amount" data-i18n-ph="amount" placeholder="Amount" min="0.01" step="0.01" inputmode="decimal" required>
+      <div class="amtrow">
+        <input type="number" id="amount" data-i18n-ph="amount" placeholder="Amount" min="0.01" step="0.01" inputmode="decimal" required>
+        <button type="button" id="calcBtn" class="calcbtn" aria-label="Calculator" title="Calculator">🧮</button>
+      </div>
       <input type="date" id="date" required>
       <input type="text" id="category" list="catList" data-i18n-ph="category" placeholder="Category" maxlength="40">
       <datalist id="catList"></datalist>

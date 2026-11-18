@@ -427,6 +427,11 @@
     input.accept = 'image/*';
     input.multiple = true;
     input.hidden = true;
+    var camInput = document.createElement('input');
+    camInput.type = 'file';
+    camInput.accept = 'image/*';
+    camInput.setAttribute('capture', 'environment');
+    camInput.hidden = true;
 
     function removePhoto(id) {
       if (!window.confirm(t('confirm_remove_photo'))) return;
@@ -451,14 +456,20 @@
       st.ids.forEach(function (id) {
         strip.appendChild(thumbButton(id, function () { viewPhoto(id, function () { removePhoto(id); }); }));
       });
-      if (st.ids.length < 12) strip.appendChild(btn('📷 ' + t('add_photo'), 'addphoto', function () { input.click(); }));
+      if (st.ids.length < 12) strip.appendChild(btn('📷 ' + t('add_photo'), 'addphoto', function () {
+        actionSheet(t('add_photo'), [
+          { label: '📷 ' + t('take_photo'), run: function () { camInput.click(); } },
+          { label: '🖼 ' + t('choose_photo'), run: function () { input.click(); } }
+        ]);
+      }));
       container.appendChild(strip);
       container.appendChild(input);
+      container.appendChild(camInput);
     }
 
-    input.addEventListener('change', function () {
-      var files = Array.prototype.slice.call(input.files || [], 0, 12 - st.ids.length);
-      input.value = '';
+    function addFrom(inp) {
+      var files = Array.prototype.slice.call(inp.files || [], 0, 12 - st.ids.length);
+      inp.value = '';
       var failed = false;
       files.reduce(function (chain, file) {
         return chain.then(function () {
@@ -476,7 +487,9 @@
         if (live) live(st.ids);
         render();
       });
-    });
+    }
+    input.addEventListener('change', function () { addFrom(input); });
+    camInput.addEventListener('change', function () { addFrom(camInput); });
 
     render();
   }
@@ -564,7 +577,14 @@
       }
       inputs[f.key] = { input: input, field: f, label: label };
       if (f.showFor) toggles.push({ node: label, f: f });
-      label.appendChild(input);
+      if (f.type === 'number' && !f.noCalc) {
+        var arow = el('div', 'amtrow');
+        arow.appendChild(input);
+        arow.appendChild(btn('🧮', 'calcbtn', function () { openCalculator(input.value, function (v) { input.value = v; input.dispatchEvent(new Event('input')); }); }));
+        label.appendChild(arow);
+      } else {
+        label.appendChild(input);
+      }
       if (f.type === 'date') makeDate(input, !f.required);
       body.appendChild(label);
     });
@@ -2519,7 +2539,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.11.0', APP_BUILD = 26;
+  var APP_VERSION = '2.12.0', APP_BUILD = 27;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
@@ -3514,6 +3534,50 @@
       $('bookSub').textContent = (window.__bookIcon ? window.__bookIcon(b) : '') + (bz ? bz.name : '');
     }
   }
+
+  /* Calculator: type or tap an expression such as 12*350+1500; "Use result" puts the answer in the field. */
+  function openCalculator(initial, onUse) {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal calcmodal');
+    var expr = initial && isFinite(parseFloat(initial)) ? String(parseFloat(initial)) : '';
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    m.appendChild(el('h2', null, t('calculator')));
+    var disp = document.createElement('input');
+    disp.type = 'text'; disp.className = 'calcdisp'; disp.inputMode = 'none'; disp.value = expr; disp.setAttribute('autocomplete', 'off');
+    var res = el('div', 'calcres');
+    function show() {
+      var v = L.calcEval(expr);
+      res.textContent = expr ? (isNaN(v) ? '…' : '= ' + money(v).replace(/^[^\d-]*/, '')) : '';
+      res.className = 'calcres' + (isNaN(v) && expr ? ' muted' : '');
+    }
+    disp.addEventListener('input', function () { expr = disp.value; show(); });
+    m.appendChild(disp); m.appendChild(res);
+    var keys = ['C', '(', ')', '÷', '7', '8', '9', '×', '4', '5', '6', '−', '1', '2', '3', '+', '0', '.', '%', '⌫'];
+    var grid = el('div', 'calcgrid');
+    keys.forEach(function (k) {
+      grid.appendChild(btn(k, 'calckey' + ('÷×−+'.indexOf(k) >= 0 ? ' op' : ''), function () {
+        if (k === 'C') expr = '';
+        else if (k === '⌫') expr = expr.slice(0, -1);
+        else expr += k;
+        disp.value = expr; show();
+      }));
+    });
+    m.appendChild(grid);
+    var eq = btn('=', 'block', function () {
+      var v = L.calcEval(expr);
+      if (!isNaN(v)) { expr = String(v); disp.value = expr; show(); }
+    });
+    m.appendChild(eq);
+    m.appendChild(btn(t('use_result'), 'block primary', function () {
+      var v = L.calcEval(expr);
+      if (isNaN(v)) { toast(t('calc_bad')); return; }
+      close(); onUse(String(v));
+    }));
+    m.appendChild(btn(t('cancel'), 'block', close));
+    ov.appendChild(m);
+    document.body.appendChild(ov);
+    show();
+  }
+  $('calcBtn').addEventListener('click', function () { openCalculator($('amount').value, function (v) { $('amount').value = v; }); });
 
   function actionSheet(title, items) {
     var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal');
