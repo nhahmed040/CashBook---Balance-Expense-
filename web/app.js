@@ -2788,12 +2788,12 @@
       var row = el('button', 'remrow ' + r.level);
       row.type = 'button';
       var tx = el('span', 'stext');
-      tx.appendChild(el('b', null, (r.kind === 'cert' ? t('unpaid_cert') + ': ' : '') + (r.who || '—')));
+      tx.appendChild(el('b', null, r.kind === 'wages' ? t('fc_wages') : (r.kind === 'cert' ? t('unpaid_cert') + ': ' : '') + (r.who || '—')));
       var cnote = r.note ? t('cn_' + r.note.split(':')[0], { n: r.note.split(':')[1] }) : '';
       tx.appendChild(el('small', 'muted', [r.project, r.desc, cnote, r.due ? t('due_label') + ' ' + fmtDate(r.due) : ''].filter(Boolean).join(' · ')));
       row.appendChild(tx);
       row.appendChild(el('span', 'amt ' + (r.level === 'overdue' ? 'out' : ''), money(r.amount)));
-      row.addEventListener('click', function () { ui.projectId = r.projectId; ui.section = r.kind === 'cert' ? 'client' : 'bills'; renderProjects(); window.scrollTo(0, 0); });
+      row.addEventListener('click', function () { ui.projectId = r.projectId; ui.section = r.kind === 'cert' ? 'client' : r.kind === 'wages' ? 'labour' : 'bills'; renderProjects(); window.scrollTo(0, 0); });
       pn.appendChild(row);
     });
     box.appendChild(pn);
@@ -2913,7 +2913,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.16.0', APP_BUILD = 31;
+  var APP_VERSION = '2.17.0', APP_BUILD = 32;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
@@ -4082,6 +4082,30 @@
     if (!bz) { if (!state.businesses.length) editBusiness(null); else toast(t('pick_business_first')); return; }
     editStaff(bz, null);
   });
+
+  /* ---------- first-time guide ---------- */
+  function showGuide() {
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal');
+    function close() {
+      try { localStorage.setItem('cashbook.guide.v1', '1'); } catch (e) { /* ignore */ }
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+    }
+    m.appendChild(el('h2', null, t('guide_title')));
+    [1, 2, 3, 4].forEach(function (i) { m.appendChild(el('p', null, t('guide_' + i))); });
+    m.appendChild(btn(t('guide_ok'), 'primary block', close));
+    ov.appendChild(m);
+    document.body.appendChild(ov);
+  }
+  (function () {
+    var seen = false;
+    try { seen = !!localStorage.getItem('cashbook.guide.v1'); } catch (e) { seen = true; }
+    var empty = !state.projects.length && state.books.every(function (b) { return !b.entries.length; });
+    if (!seen && empty && !navigator.webdriver) setTimeout(showGuide, 400);
+  })();
+  var gb = document.createElement('button');
+  gb.type = 'button'; gb.className = 'block'; gb.textContent = t('guide_show');
+  gb.addEventListener('click', function () { $('closeAbout').click(); showGuide(); });
+  $('aboutBackup').parentNode.insertBefore(gb, $('aboutBackup'));
 
   /* ---------- start ---------- */
   touchBooks();                      // remember how each book looks now, so only later changes count as an update

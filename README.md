@@ -209,3 +209,9 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 - **Site diary**: new Diary section in each project (date, weather, workers on site, work done, problems, visitors, photos) with a printable weekly/monthly progress report. Shared projects sync the diary; photos stay on each phone.
 - **Search** (🔍 at the top): finds entries, bills, certificates, BoQ rows, diary notes and contacts, and jumps to them.
 - **Quick add**: recent categories appear as tap chips in the entry form.
+
+## 2.17.0
+
+- **Afaan Oromoo and Amharic** for every screen added since 2.3 (cloud sync, sharing, certificates, BoQ import, progress, forecast, profit, diary, statements, search). Please have a native speaker review the wording.
+- **First-time guide** on a fresh install (also under About → Show the quick guide).
+- **Weekly worker pay reminder**: unpaid attendance shows in Reminders; it turns urgent once the oldest unpaid day is 7 days old.

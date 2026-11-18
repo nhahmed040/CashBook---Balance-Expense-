@@ -742,6 +742,11 @@
           out.push({ kind: 'cert', projectId: p.id, project: p.name, id: c.id, who: c.no, desc: '', note: note, status: st, due: '', amount: bal, level: level });
         }
       });
+      var un = p.attendance.filter(function (a) { return !a.paid; });
+      if (un.length) {
+        var oldest = un.reduce(function (m, a) { return a.date < m ? a.date : m; }, un[0].date), dw = daysSince(oldest, today);
+        out.push({ kind: 'wages', projectId: p.id, project: p.name, id: 0, who: '', desc: '', note: 'wages:' + dw, due: '', amount: round2(sum(un, function (a) { return a.days * a.rate; })), level: dw >= 7 ? 'overdue' : 'later' });
+      }
     });
     var rank = { overdue: 0, soon: 1, later: 2, none: 3 };
     return out.sort(function (a, b) {
