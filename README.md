@@ -96,6 +96,12 @@ Builds are signed with a fixed key (`app/cashbook.keystore`), so a new APK insta
 - **Existing projects** are converted once on first load: each section with priced items gets a Summary line at its end (titled like the section), and lettered headings (“A. Substructure”) become Group titles. Delete or rename what you do not want. “Create summary lines from headings” in the BoQ tab repeats this for a project that has none (for example after a CSV import). CSV markers: `SUM` and `GROUP` in the No column.
 - **Contractor name** is the one field in Edit project details; it appears on the certificate, Summary, BOQ and Variation Order sheets, printouts and signature blocks. The business form no longer has a contractor field.
 
+## Cash forecast (2.13)
+
+- **Projects → Cash forecast** lists the money you expect (unpaid certificates with an expected date) and the money you must pay (supplier bills by due date, workers' unpaid wages), with the net for the next 30 days.
+- Expected date of a certificate = approval date + payment days (submitted but not approved: sent date + approval days + payment days). A draft has no date yet.
+- **Edit project** now has *Client approval takes (days)* (default 14) and *Client payment takes after approval (days)* (default 21). The follow-up reminders use them per project.
+
 ## Camera and calculator (2.12)
 
 - **Add photo** now asks **Take a photo** (opens the camera) or **Choose from gallery**.

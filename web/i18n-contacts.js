@@ -3,6 +3,11 @@
 (function () {
   var add = {
     en: {
+      fc_total: 'Total',
+      forecast: 'Cash forecast', fc_in_30: 'Money coming in (overdue + next 30 days)', fc_out_30: 'Money to pay (overdue + next 30 days)', fc_net: 'Net next 30 days',
+      fc_money_in: 'Money coming in', fc_money_out: 'Money to pay out', fc_wages: 'Workers’ unpaid wages', fc_overdue: 'Overdue since', fc_no_date_in: 'No date yet (certificate not submitted)', fc_no_date_out: 'No due date',
+      fc_note: 'Expected dates for certificates use the approval and payment days set in each project (Edit project). Bills use their due date.',
+      approve_days: 'Client approval takes (days)', pay_days: 'Client payment takes after approval (days)',
       take_photo: 'Take a photo', choose_photo: 'Choose from gallery', calculator: 'Calculator', use_result: 'Use result', calc_bad: 'This calculation is not complete.',
       about_new_9: 'Share a whole project: view only or can edit',
       proj_view_only: 'This project is view only. Only the owner or editors can change it.',

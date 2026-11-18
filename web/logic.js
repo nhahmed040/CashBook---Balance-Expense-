@@ -298,6 +298,8 @@
       vat: num(p.vat, 0, 100),
       wht: num(p.wht, 0, 100),
       retention: num(p.retention, 0, 100),
+      approveDays: p.approveDays == null || p.approveDays === '' ? CERT_APPROVE_DAYS : Math.round(num(p.approveDays, 1, 365)),
+      payDays: p.payDays == null || p.payDays === '' ? CERT_PAY_DAYS : Math.round(num(p.payDays, 1, 365)),
       advance: adv.amount,
       advancePct: adv.pct,
       recoveryPct: num(p.recoveryPct == null ? 20 : p.recoveryPct, 0, 100),
@@ -717,8 +719,8 @@
         var cc = certCalc(p, c), bal = cc.balance, st = certStatus(c, cc);
         if (bal > 0 && st !== 'paid') {
           var level = 'none', note = '', d;
-          if (st === 'submitted' && c.sentDate && (d = daysSince(c.sentDate, today)) >= CERT_APPROVE_DAYS) { level = 'overdue'; note = 'submitted:' + d; }
-          else if (st === 'approved' && c.approvedDate && (d = daysSince(c.approvedDate, today)) >= CERT_PAY_DAYS) { level = 'overdue'; note = 'approved:' + d; }
+          if (st === 'submitted' && c.sentDate && (d = daysSince(c.sentDate, today)) >= (p.approveDays || CERT_APPROVE_DAYS)) { level = 'overdue'; note = 'submitted:' + d; }
+          else if (st === 'approved' && c.approvedDate && (d = daysSince(c.approvedDate, today)) >= (p.payDays || CERT_PAY_DAYS)) { level = 'overdue'; note = 'approved:' + d; }
           else if (st === 'draft' && (d = daysSince(c.date, today)) >= 7) { level = 'later'; note = 'draft:' + d; }
           out.push({ kind: 'cert', projectId: p.id, project: p.name, id: c.id, who: c.no, desc: '', note: note, status: st, due: '', amount: bal, level: level });
         }
@@ -1313,7 +1315,50 @@
     return Math.round(out * 1e8) / 1e8;
   }
 
+  function addDaysStr(date, n) {
+    var d = new Date(date + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  /* Money expected in and owed out. Certificates: expected = approval date + payment days (submitted: + approval days too).
+     Bills: the due date. Workers' unpaid wages are owed now. `horizon` = days ahead that count as "coming". */
+  function cashForecast(state, today, horizon) {
+    horizon = horizon || 30;
+    var end = addDaysStr(today, horizon), inc = [], out = [];
+    state.projects.forEach(function (p) {
+      p.certs.forEach(function (c) {
+        var cc = certCalc(p, c), st = certStatus(c, cc);
+        if (cc.balance <= 0 || st === 'paid') return;
+        var exp = '';
+        if (st === 'approved' && c.approvedDate) exp = addDaysStr(c.approvedDate, p.payDays || CERT_PAY_DAYS);
+        else if (st === 'submitted' && c.sentDate) exp = addDaysStr(c.sentDate, (p.approveDays || CERT_APPROVE_DAYS) + (p.payDays || CERT_PAY_DAYS));
+        inc.push({ projectId: p.id, project: p.name, id: c.id, who: c.no, status: st, amount: cc.balance, date: exp, overdue: !!exp && exp < today, soon: !!exp && exp >= today && exp <= end });
+      });
+      p.bills.forEach(function (b) {
+        var bal = billBalance(b);
+        if (bal <= 0) return;
+        out.push({ projectId: p.id, project: p.name, id: b.id, who: b.supplier, desc: b.desc, amount: bal, date: b.due || '', overdue: !!b.due && b.due < today, soon: !!b.due && b.due >= today && b.due <= end });
+      });
+      var wages = sum(p.attendance, function (a) { return a.paid ? 0 : a.days * a.rate; });
+      if (wages > 0) out.push({ projectId: p.id, project: p.name, id: 0, who: '', desc: 'wages', wages: true, amount: round2(wages), date: today, overdue: false, soon: true });
+    });
+    function by(a, b) { return (a.date || '9999') < (b.date || '9999') ? -1 : (a.date || '9999') > (b.date || '9999') ? 1 : b.amount - a.amount; }
+    inc.sort(by); out.sort(by);
+    function tot(list, f) { return round2(sum(list.filter(f), function (x) { return x.amount; })); }
+    var t = {
+      inOverdue: tot(inc, function (x) { return x.overdue; }), inSoon: tot(inc, function (x) { return x.soon; }),
+      inLater: tot(inc, function (x) { return !x.overdue && !x.soon && x.date; }), inUnknown: tot(inc, function (x) { return !x.date; }),
+      outOverdue: tot(out, function (x) { return x.overdue; }), outSoon: tot(out, function (x) { return x.soon; }),
+      outLater: tot(out, function (x) { return !x.overdue && !x.soon && x.date; }), outUnknown: tot(out, function (x) { return !x.date; })
+    };
+    t.inAll = round2(t.inOverdue + t.inSoon + t.inLater + t.inUnknown);
+    t.outAll = round2(t.outOverdue + t.outSoon + t.outLater + t.outUnknown);
+    t.net = round2(t.inOverdue + t.inSoon - t.outOverdue - t.outSoon);
+    return { incoming: inc, outgoing: out, totals: t, horizon: horizon };
+  }
+
   return {
+    cashForecast: cashForecast,
     calcEval: calcEval,
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,
     sanitizeContact: sanitizeContact, sanitizeBusiness: sanitizeBusiness, contactBalances: contactBalances,

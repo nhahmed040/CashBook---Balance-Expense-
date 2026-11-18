@@ -869,6 +869,7 @@
 
     list.textContent = '';
     if (!state.projects.length) { list.appendChild(el('p', 'empty', t('no_projects'))); return; }
+    list.appendChild(btn('💰 ' + t('forecast'), 'block', openForecast));
     state.projects.forEach(function (p) {
       var s = L.projectSummary(state, p.id);
       var card = el('div', 'pcard');
@@ -890,6 +891,44 @@
       card.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
       list.appendChild(card);
     });
+  }
+
+  /* Cash forecast: what should come in and what must go out */
+  function openForecast() {
+    var f = L.cashForecast(state, L.todayStr(), 30), T = f.totals;
+    var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal importmodal');
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    m.appendChild(el('h2', null, t('forecast')));
+    var net = panel(null);
+    net.appendChild(kv(t('fc_in_30'), money(L.round2(T.inOverdue + T.inSoon)), 'pos'));
+    net.appendChild(kv(t('fc_out_30'), money(L.round2(T.outOverdue + T.outSoon)), 'neg'));
+    net.appendChild(kv(t('fc_net'), money(T.net), T.net < 0 ? 'neg' : 'pos'));
+    m.appendChild(net);
+    function section(title, list, isIn) {
+      var P = panel(title);
+      if (!list.length) P.appendChild(el('p', 'muted small', t('no_data')));
+      list.forEach(function (x) {
+        var row = el('div', 'improw');
+        var tx = el('span', 'stext');
+        var name = isIn ? (x.project + ' · ' + x.who) : (x.wages ? x.project + ' · ' + t('fc_wages') : x.project + ' · ' + (x.who || t('uncategorized')) + (x.desc ? ' – ' + x.desc : ''));
+        tx.appendChild(el('b', null, name));
+        var sub = x.date ? (x.overdue ? t('fc_overdue') + ' ' : '') + fmtDate(x.date) : (isIn ? t('fc_no_date_in') : t('fc_no_date_out'));
+        if (isIn) sub += ' · ' + t('cs_' + x.status);
+        tx.appendChild(el('small', x.overdue ? 'neg' : 'muted', sub));
+        row.appendChild(tx);
+        row.appendChild(el('span', isIn ? 'pos' : 'neg', money(x.amount)));
+        P.appendChild(row);
+      });
+      P.appendChild(kv(t('fc_total'), money(isIn ? T.inAll : T.outAll)));
+      m.appendChild(P);
+    }
+    section(t('fc_money_in'), f.incoming, true);
+    section(t('fc_money_out'), f.outgoing, false);
+    m.appendChild(el('p', 'muted small', t('fc_note')));
+    m.appendChild(btn(t('close'), 'block', close));
+    ov.appendChild(m);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.body.appendChild(ov);
   }
 
   function budgetBar(actual, budget) {
@@ -1343,7 +1382,9 @@
       { key: 'variation', label: t('variation_total'), type: 'number', min: 0, value: p.variation || '' },
       { key: 'rebate', label: t('rebate_pct'), type: 'number', min: 0, max: 100, value: p.rebate || '' },
       { key: 'startDate', label: t('start_date'), type: 'date', value: p.startDate },
-      { key: 'endDate', label: t('end_date'), type: 'date', value: p.endDate }
+      { key: 'endDate', label: t('end_date'), type: 'date', value: p.endDate },
+      { key: 'approveDays', label: t('approve_days'), type: 'number', min: 1, max: 365, value: p.approveDays, noCalc: true },
+      { key: 'payDays', label: t('pay_days'), type: 'number', min: 1, max: 365, value: p.payDays, noCalc: true }
     ];
   }
   function applyProjectValues(p, v) {
@@ -1360,6 +1401,8 @@
     p.contractor = v.contractor.slice(0, 60); p.variation = Math.max(0, L.round2(v.variation)); p.rebate = Math.min(100, Math.max(0, L.round2(v.rebate)));
     p.startDate = L.isDate(v.startDate) ? v.startDate : '';
     p.endDate = L.isDate(v.endDate) ? v.endDate : '';
+    p.approveDays = Math.min(365, Math.max(1, Math.round(v.approveDays) || 14));
+    p.payDays = Math.min(365, Math.max(1, Math.round(v.payDays) || 21));
   }
   function editProject(p) {
     openForm({
@@ -2539,7 +2582,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.12.0', APP_BUILD = 27;
+  var APP_VERSION = '2.13.0', APP_BUILD = 28;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
