@@ -49,7 +49,7 @@
     var SC = [['F', 5, 'amt'], ['J', 9, 'prev'], ['K', 10, 'cur'], ['L', 11, 'to']];
     var segStart = r, seg = { amt: 0, prev: 0, cur: 0, to: 0 };
     // styles, one per row type
-    var GRP = { fill: '4B3BB5', color: 'FFFFFF', b: true }, LIN = { fill: 'E4DEFF', b: true }, SUMS = { fill: 'F2F2F2', b: true }, NOTE = { i: true, color: '595959' };
+    var GRP = { fill: 'BDD7EE', color: '1F3864', b: true }, LIN = { fill: 'E8F1FA', b: true }, SUMS = { fill: 'F2F2F2', b: true }, NOTE = { b: true };
     // pre-pass: value of every total row, so a Summary line can point at the next total below it
     var sumVals = {}, acc = { amt: 0, prev: 0, cur: 0, to: 0 };
     p.boq.forEach(function (it, idx) {
@@ -208,9 +208,9 @@
       if (sec.type === 'group') {
         closeGroup();
         var letter = String.fromCharCode(65 + (gi++ % 26));
-        put(r, 1, { v: letter, s: st({ h: 'center', fill: '4B3BB5', color: 'FFFFFF' }, cell) });
-        put(r, 2, { v: sec.title.toUpperCase(), s: st({ h: 'center', fill: '4B3BB5', color: 'FFFFFF' }, cell) });
-        for (var k = 3; k <= 6; k++) put(r, k, { s: st({ fill: '4B3BB5' }, cell) });
+        put(r, 1, { v: letter, s: st({ h: 'center', fill: 'BDD7EE', color: '1F3864' }, cell) });
+        put(r, 2, { v: sec.title.toUpperCase(), s: st({ h: 'center', fill: 'BDD7EE', color: '1F3864' }, cell) });
+        for (var k = 3; k <= 6; k++) put(r, k, { s: st({ fill: 'BDD7EE' }, cell) });
         curGroup = { letter: letter, first: r + 1, sum: { amt: 0, prev: 0, cur: 0, to: 0 } };
         r++; return;
       }

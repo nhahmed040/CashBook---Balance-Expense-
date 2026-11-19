@@ -227,3 +227,7 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 ## 2.19.0
 
 - **Progress update works per payment**: each item shows Previous (at the last certificate), Current (this payment, the box you type in) and Up to date (Previous + Current). Saving sets the item total to Previous + Current, so you can correct this payment before issuing the next certificate.
+
+## 2.19.1
+
+- Excel and print: plain rows are bold; group title rows and summary line rows use lighter blues (a stronger blue for group titles, a paler blue for summary lines).
