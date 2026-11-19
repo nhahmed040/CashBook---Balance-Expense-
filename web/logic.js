@@ -1520,7 +1520,7 @@
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isItemRow: isItemRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
-    boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
+    round6: round6, boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, projectRecords: projectRecords, applyProjectRecords: applyProjectRecords, sanitizeProjSync: sanitizeProjSync, CERT_STATUSES: CERT_STATUSES, certStatus: certStatus, photoIds: photoIds,
     TRASH_DAYS: TRASH_DAYS, sanitizeTrash: sanitizeTrash, trashPhotoIds: trashPhotoIds, trashRestoreItem: trashRestoreItem
   };

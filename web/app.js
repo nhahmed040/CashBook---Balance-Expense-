@@ -900,16 +900,20 @@
     var items = p.boq.filter(L.isItemRow);
     var title = '', rows = [], vals = {}, onlyWork = false, filter = '';
     var head = null;
+    /* Previous = quantities at the last certificate; Current = this payment; Up to date = previous + current */
+    var lastCert = L.sortedCerts(p).slice(-1)[0], prevMap = lastCert && lastCert.snap ? lastCert.snap : {};
+    function prevOf(it) { return Math.min(prevMap[it.id] || 0, it.done); }
     p.boq.forEach(function (it) {
       if (L.isGroupRow(it) || L.isLineRow(it)) head = it.desc;
       else if (L.isItemRow(it)) rows.push({ it: it, head: head });
     });
+    rows.forEach(function (r) { var c = L.round6 ? L.round6(r.it.done - prevOf(r.it)) : r.it.done - prevOf(r.it); if (c > 0) vals[r.it.id] = c; });
     function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
     var summaryBox = el('div', 'panel'), listBox = el('div', 'importlist progList');
     function todayVal(it) { var v = vals[it.id]; return v == null || v === '' || isNaN(v) ? 0 : Number(v); }
     function totals() {
       var period = 0, toDate = 0, total = 0;
-      rows.forEach(function (r) { period += todayVal(r.it) * r.it.rate; toDate += (r.it.done + todayVal(r.it)) * r.it.rate; total += r.it.qty * r.it.rate; });
+      rows.forEach(function (r) { period += todayVal(r.it) * r.it.rate; toDate += (prevOf(r.it) + todayVal(r.it)) * r.it.rate; total += r.it.qty * r.it.rate; });
       var certified = L.round2(p.certs.reduce(function (a, c) { return a + c.gross; }, 0));
       return { period: L.round2(period), toDate: L.round2(toDate), total: L.round2(total), certified: certified };
     }
@@ -943,12 +947,13 @@
         inp.value = vals[it.id] != null && vals[it.id] !== '' ? vals[it.id] : '';
         var warn = el('small', 'neg', '');
         function upd() {
-          var v = todayVal(it), cum = L.round2(it.done + v), pct = it.qty > 0 ? Math.round(cum / it.qty * 100) : 0;
-          info.textContent = it.unit + ' · BoQ ' + it.qty + ' · ' + t('pg_prev') + ' ' + it.done + ' → ' + cum + ' (' + pct + '%)';
+          var v = todayVal(it), pv = prevOf(it), cum = L.round2(pv + v), pct = it.qty > 0 ? Math.round(cum / it.qty * 100) : 0;
+          info.textContent = it.unit + ' · BoQ ' + it.qty + ' · ' + t('pg_previous') + ' ' + pv + ' · ' + t('pg_upto') + ' ' + cum + ' (' + pct + '%)';
           warn.textContent = cum > it.qty + 1e-9 ? t('pg_exceeds', { n: L.round2(cum - it.qty) }) : '';
         }
         inp.addEventListener('input', function () { vals[it.id] = inp.value === '' ? '' : parseFloat(inp.value); upd(); drawSummary(); });
-        var rest = L.round2(Math.max(0, it.qty - it.done));
+        inp.title = t('pg_current');
+        var rest = L.round2(Math.max(0, it.qty - prevOf(it)));
         var fin = btn('100%', 'progfin', function () { vals[it.id] = rest; inp.value = rest || ''; upd(); drawSummary(); });
         box.appendChild(inp); box.appendChild(fin);
         row.appendChild(box);
@@ -962,13 +967,14 @@
     function apply() {
       var n = 0;
       rows.forEach(function (r) {
-        var v = todayVal(r.it);
-        if (v) { r.it.done = L.round2(r.it.done + v); n++; }
+        var nd = L.round2(prevOf(r.it) + todayVal(r.it));
+        if (Math.abs(nd - r.it.done) > 1e-9) { r.it.done = nd; n++; }
       });
       return n;
     }
     m.appendChild(el('h2', null, t('progress_btn')));
     m.appendChild(el('p', 'muted small', t('pg_note')));
+    m.appendChild(el('p', 'progcols', t('pg_cols')));
     var search = document.createElement('input');
     search.type = 'search'; search.placeholder = t('search_boq');
     search.addEventListener('input', function () { filter = search.value; drawRows(); });
@@ -2935,7 +2941,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.18.1', APP_BUILD = 34;
+  var APP_VERSION = '2.19.0', APP_BUILD = 35;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

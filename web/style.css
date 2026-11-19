@@ -595,7 +595,7 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .progmodal > .panel { padding: 8px 10px; }
 @media (min-width: 700px) { .progmodal { border-radius: 20px; align-self: center; height: 92vh; } .overlay.sheetov:has(.progmodal) { align-items: center; } }
 
-.progmodal > p.small { display: none; }
+.progmodal > p.small:not(.progcols) { display: none; }
 .progmodal > .panel { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
 .progmodal > .panel .kvrow { font-size: .78rem; flex-direction: column; gap: 0; align-items: flex-start; }
 .progmodal > .panel .kvrow b { text-align: left; font-size: .9rem; }
@@ -603,3 +603,5 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .progfoot { display: flex; gap: 8px; flex-wrap: wrap; }
 .progfoot button { flex: 1 1 0; min-width: 110px; margin-top: 0 !important; padding: 10px 6px; }
 .progfoot .primary { flex-basis: 100%; order: -1; }
+
+.progmodal > p.progcols { display: block; margin: 0; font-size: .72rem; color: var(--muted); }

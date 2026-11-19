@@ -223,3 +223,7 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 ## 2.18.1
 
 - Progress update window is taller and the item list is much bigger: totals are in two columns and the buttons sit together at the bottom.
+
+## 2.19.0
+
+- **Progress update works per payment**: each item shows Previous (at the last certificate), Current (this payment, the box you type in) and Up to date (Previous + Current). Saving sets the item total to Previous + Current, so you can correct this payment before issuing the next certificate.
