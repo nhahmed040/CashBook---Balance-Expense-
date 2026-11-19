@@ -978,12 +978,13 @@
     lab.appendChild(cb); lab.appendChild(el('span', null, ' ' + t('pg_only_work')));
     m.appendChild(lab);
     m.appendChild(summaryBox); m.appendChild(listBox);
-    m.appendChild(btn(t('pg_save'), 'block', function () {
+    var foot = el('div', 'progfoot');
+    foot.appendChild(btn(t('pg_save'), '', function () {
       var n = apply();
       if (!n) { toast(t('pg_none')); return; }
       save(); renderAll(); close(); toast(t('pg_saved', { n: n }));
     }));
-    m.appendChild(btn(t('pg_save_cert'), 'block primary', function () {
+    foot.appendChild(btn(t('pg_save_cert'), 'primary', function () {
       var n = apply();
       if (n) { save(); }
       var proposed = L.proposeCertGross(p);
@@ -992,7 +993,8 @@
       ui.section = 'client'; renderProjects();
       editCert(p, null, { gross: proposed });
     }));
-    m.appendChild(btn(t('cancel'), 'block', close));
+    foot.appendChild(btn(t('cancel'), '', close));
+    m.appendChild(foot);
     ov.appendChild(m);
     document.body.appendChild(ov);
     drawSummary(); drawRows();
@@ -2933,7 +2935,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.18.0', APP_BUILD = 33;
+  var APP_VERSION = '2.18.1', APP_BUILD = 34;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

@@ -587,3 +587,19 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .srchinp{width:100%;margin-bottom:8px}
 .srchgrp{margin:8px 0 2px;font-weight:600}
 .diaryimg{display:flex;gap:4px;flex-wrap:wrap}
+/* Progress update: use nearly the whole screen, the item list takes all spare height */
+.progmodal { max-width: 820px; height: 96vh; max-height: 96vh; overflow: hidden; padding-top: 14px; }
+.progmodal .progList { flex: 1 1 auto; max-height: none; min-height: 140px; }
+.progmodal .progRow { padding: 9px 8px; font-size: .95rem; }
+.progmodal .progIn input { min-width: 84px; font-size: 1.05rem; padding: 8px; }
+.progmodal > .panel { padding: 8px 10px; }
+@media (min-width: 700px) { .progmodal { border-radius: 20px; align-self: center; height: 92vh; } .overlay.sheetov:has(.progmodal) { align-items: center; } }
+
+.progmodal > p.small { display: none; }
+.progmodal > .panel { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
+.progmodal > .panel .kvrow { font-size: .78rem; flex-direction: column; gap: 0; align-items: flex-start; }
+.progmodal > .panel .kvrow b { text-align: left; font-size: .9rem; }
+.progmodal > .panel .kvrow.total { border-top: 0; padding-top: 0; font-size: .78rem; }
+.progfoot { display: flex; gap: 8px; flex-wrap: wrap; }
+.progfoot button { flex: 1 1 0; min-width: 110px; margin-top: 0 !important; padding: 10px 6px; }
+.progfoot .primary { flex-basis: 100%; order: -1; }

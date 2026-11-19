@@ -219,3 +219,7 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 ## 2.18.0
 
 - **Cost control per BoQ section**: bills and cash-out entries (in books linked to a project) can be tagged to a BoQ section (a summary line such as "1. Excavation", or a group heading when the BoQ has no summary lines). The Overview profit panel shows cost against the contract value of each section, with a warning when a section is over. Costs not tagged to a section are listed separately.
+
+## 2.18.1
+
+- Progress update window is taller and the item list is much bigger: totals are in two columns and the buttons sit together at the bottom.
