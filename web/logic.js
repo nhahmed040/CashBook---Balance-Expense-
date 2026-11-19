@@ -1004,6 +1004,39 @@
     return Math.max(0, round2(earned - certified));
   }
 
+  /* ---------- certificate lock ----------
+     Only the latest certificate can be a draft. It follows the live progress. Every earlier
+     certificate, and any certificate that is submitted, approved or paid, is locked: its saved
+     quantities are frozen and new progress counts for the next payment. */
+  function certLocked(project, cert) {
+    var list = sortedCerts(project), last = list[list.length - 1];
+    return cert !== last || certStatus(cert, certCalc(project, cert)) !== 'draft';
+  }
+  function draftCert(project) {
+    var list = sortedCerts(project), last = list[list.length - 1];
+    return last && !certLocked(project, last) ? last : null;
+  }
+  /* Quantities of the last locked certificate: the quantities that can no longer go down. */
+  function lockedSnap(project) {
+    var out = {};
+    sortedCerts(project).forEach(function (c) { if (certLocked(project, c)) out = c.snap || {}; });
+    return out;
+  }
+  function snapDiffers(project, cert) {
+    var now = boqSnapshot(project), then = cert.snap || {}, diff = false;
+    Object.keys(now).concat(Object.keys(then)).forEach(function (k) { if (Math.abs((now[k] || 0) - (then[k] || 0)) > 1e-9) diff = true; });
+    return diff;
+  }
+  /* Bring a draft certificate up to date with the live progress. Returns the new gross, or 0 if nothing to certify. */
+  function refreshDraft(project, cert) {
+    var others = sum(project.certs, function (c) { return c === cert ? 0 : c.gross; });
+    var work = Math.max(0, round2(boqSummary(project).earned - others));
+    cert.snap = boqSnapshot(project);
+    if (work <= 0) return 0;
+    cert.gross = round2(work + certVariation(cert));
+    return cert.gross;
+  }
+
   /* Total certified before this certificate and up to and including it (date, then id order). */
   function certCumulative(project, certId) {
     var list = project.certs.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
@@ -1520,6 +1553,7 @@
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isItemRow: isItemRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,
     suggestAdvanceRecovery: suggestAdvanceRecovery, boqSummary: boqSummary, proposeCertGross: proposeCertGross, certCumulative: certCumulative,
+    certLocked: certLocked, draftCert: draftCert, lockedSnap: lockedSnap, snapDiffers: snapDiffers, refreshDraft: refreshDraft,
     round6: round6, boqSnapshot: boqSnapshot, sortedCerts: sortedCerts, boqProgress: boqProgress, boqSections: boqSections, amountWords: amountWords,
     boqCsv: boqCsv, boqFromCsv: boqFromCsv, boqFromRows: boqFromRows, projectRecords: projectRecords, applyProjectRecords: applyProjectRecords, sanitizeProjSync: sanitizeProjSync, CERT_STATUSES: CERT_STATUSES, certStatus: certStatus, photoIds: photoIds,
     TRASH_DAYS: TRASH_DAYS, sanitizeTrash: sanitizeTrash, trashPhotoIds: trashPhotoIds, trashRestoreItem: trashRestoreItem

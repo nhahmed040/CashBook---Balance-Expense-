@@ -901,7 +901,7 @@
     var title = '', rows = [], vals = {}, onlyWork = false, filter = '';
     var head = null;
     /* Previous = quantities at the last certificate; Current = this payment; Up to date = previous + current */
-    var lastCert = L.sortedCerts(p).slice(-1)[0], prevMap = lastCert && lastCert.snap ? lastCert.snap : {};
+    var prevMap = L.lockedSnap(p);
     function prevOf(it) { return Math.min(prevMap[it.id] || 0, it.done); }
     p.boq.forEach(function (it) {
       if (L.isGroupRow(it) || L.isLineRow(it)) head = it.desc;
@@ -988,11 +988,16 @@
     foot.appendChild(btn(t('pg_save'), '', function () {
       var n = apply();
       if (!n) { toast(t('pg_none')); return; }
-      save(); renderAll(); close(); toast(t('pg_saved', { n: n }));
+      save(); renderAll(); close();
+      var dr = L.draftCert(p);
+      if (dr) toast(t('pg_saved', { n: n }), { label: t('cert_refresh'), run: function () { refreshDraftCert(p, dr, true); } });
+      else toast(t('pg_saved', { n: n }));
     }));
     foot.appendChild(btn(t('pg_save_cert'), 'primary', function () {
       var n = apply();
       if (n) { save(); }
+      var dr2 = L.draftCert(p);
+      if (dr2) { close(); refreshDraftCert(p, dr2, true); return; }
       var proposed = L.proposeCertGross(p);
       close();
       if (proposed <= 0) { renderAll(); toast(t('nothing_to_certify')); return; }
@@ -1479,6 +1484,8 @@
       inp.addEventListener('change', function () {
         var v = parseFloat(inp.value);
         it.done = isFinite(v) && v > 0 ? Math.round(v * 1e6) / 1e6 : 0;
+        var floor = L.lockedSnap(p)[it.id] || 0;
+        if (it.done < floor) { it.done = floor; toast(t('qty_locked', { n: floor })); }
         save(); renderProjects();
       });
       dn.appendChild(inp);
@@ -1921,6 +1928,8 @@
       if (stDate) stRow.appendChild(el('small', 'muted', fmtDate(stDate)));
       stRow.appendChild(btn(t('cs_change'), '', function () { changeCertStatus(p, cert); }));
       card.appendChild(stRow);
+      if (L.certLocked(p, cert)) card.appendChild(el('div', 'muted small', t('cert_locked')));
+      else card.appendChild(btn(t('cert_refresh'), 'block', function () { refreshDraftCert(p, cert, false); }));
       if (c.variation > 0) {
         card.appendChild(kv(t('work_excl_var'), money(c.work)));
         card.appendChild(kv('+ ' + t('variation_orders'), money(c.variation)));
@@ -1967,10 +1976,31 @@
     });
   }
 
+  function refreshDraftCert(p, cert, quiet) {
+    function go() {
+      var g = L.refreshDraft(p, cert);
+      save(); renderAll();
+      toast(g > 0 ? t('cert_refreshed', { no: cert.no || '', gross: money(g) }) : t('nothing_to_certify'));
+    }
+    if (quiet) go(); else if (window.confirm(t('cert_refresh_confirm'))) go();
+  }
   function changeCertStatus(p, cert) {
     var cur = L.certStatus(cert, L.certCalc(p, cert));
     actionSheet(t('cs_change') + ' – ' + (cert.no || ''), L.CERT_STATUSES.map(function (k) {
-      return { label: (k === cur ? '✓ ' : '') + t('cs_' + k), run: function () { setCertStatus(p, cert, k); } };
+      return { label: (k === cur ? '✓ ' : '') + t('cs_' + k), run: function () {
+        if (k === cur) return;
+        if (k === 'draft') {
+          if (L.sortedCerts(p).slice(-1)[0] !== cert) { toast(t('cert_unlock_old')); return; }
+          if (!window.confirm(t('cert_unlock_confirm'))) return;
+        } else if (L.draftCert(p) === cert && L.snapDiffers(p, cert)) {
+          actionSheet(t('cert_stale'), [
+            { label: t('cert_refresh_then'), run: function () { L.refreshDraft(p, cert); save(); setCertStatus(p, cert, k); } },
+            { label: t('cert_keep_asis'), run: function () { setCertStatus(p, cert, k); } }
+          ]);
+          return;
+        }
+        setCertStatus(p, cert, k);
+      } };
     }));
   }
   function setCertStatus(p, cert, k) {
@@ -2941,7 +2971,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.19.1', APP_BUILD = 36;
+  var APP_VERSION = '2.20.0', APP_BUILD = 37;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

@@ -72,8 +72,8 @@
         var lk = linked[it.id], sv = lk ? sumVals[lk.sumId] : null;
         put(r, 0, { s: st(LIN, cell) }); put(r, 1, { v: it.desc, s: st(LIN, cell) });
         for (var kl = 2; kl <= 4; kl++) put(r, kl, { s: st(LIN, cell) });
-        SC.forEach(function (c) { put(r, c[1], { f: sv ? c[0] + sv.row : '0', v: sv ? sv.v[c[2]] : 0, s: st(st({ fmt: MONEY, h: 'right' }, LIN), cell) }); });
-        [6, 7, 8].forEach(function (k5) { put(r, k5, { s: st(LIN, cell) }); });
+        // summary line rows carry no totals; the total sits on the "Total carried to summary" row
+        [5, 6, 7, 8, 9, 10, 11].forEach(function (k5) { put(r, k5, { s: st(LIN, cell) }); });
         sectionRows.push({ type: 'line', title: it.desc, row: sv ? sv.row : 0, sum: sv ? sv.v : { amt: 0, prev: 0, cur: 0, to: 0 } });
         r++; return;
       }
