@@ -11,6 +11,10 @@ import android.provider.MediaStore;
 import androidx.core.content.FileProvider;
 import java.io.File;
 import android.net.Uri;
+import android.app.NotificationManager;
+import android.content.pm.PackageManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -289,6 +293,37 @@ public class MainActivity extends Activity {
 
         /** Saves a binary file (an .xlsx workbook) given as base64. Returns where it went, or "". */
         /** Opens the phone's contact picker; the choice comes back through window.__onPhoneContact(name, phone). */
+        @android.webkit.JavascriptInterface
+        public void setNotifications(String json) {
+            try {
+                Notifier.apply(MainActivity.this, json == null ? "[]" : json);
+            } catch (Exception ignored) { /* reminders are optional */ }
+        }
+
+        @android.webkit.JavascriptInterface
+        public boolean notificationsAllowed() {
+            if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            return nm != null && nm.areNotificationsEnabled();
+        }
+
+        @android.webkit.JavascriptInterface
+        public void requestNotificationPermission() {
+            if (Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1002));
+            }
+        }
+
+        @android.webkit.JavascriptInterface
+        public void testNotification(final String title, final String text) {
+            new Handler(Looper.getMainLooper()).postDelayed(
+                    () -> Notifier.show(MainActivity.this, 9000, title, text), 3000);
+        }
+
         @android.webkit.JavascriptInterface
         public void pickContact() {
             runOnUiThread(() -> {

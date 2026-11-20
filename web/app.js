@@ -2834,8 +2834,91 @@
   }
 
   /* ---------- reminders: unpaid bills and certificates ---------- */
+  var REM_KEY = 'cashbook.rem.v1', NOTIF_KEY = 'cashbook.notif.v1';
+  function remMap() { try { return JSON.parse(localStorage.getItem(REM_KEY)) || {}; } catch (e) { return {}; } }
+  function remSave(m) { try { localStorage.setItem(REM_KEY, JSON.stringify(m)); } catch (e) { /* ignore */ } renderReminders(); }
+  function notifOn() { try { return localStorage.getItem(NOTIF_KEY) === '1'; } catch (e) { return false; } }
+
+  function openReminderTarget(r) {
+    ui.projectId = r.projectId;
+    ui.section = r.kind === 'cert' ? 'client' : r.kind === 'wages' ? 'labour' : 'bills';
+    showView('projects'); renderProjects(); renderReminders(); window.scrollTo(0, 0);
+  }
+  function reminderActions(r) {
+    var p = projectById(r.projectId), key = L.reminderKey(r), items = [];
+    items.push({ label: t('rem_open'), run: function () { openReminderTarget(r); } });
+    if (p && r.kind === 'bill') {
+      var bill = p.bills.filter(function (b) { return b.id === r.id; })[0];
+      if (bill) items.push({ label: t('rem_paid'), run: function () { payBill(p, bill); } });
+    }
+    if (p && r.kind === 'cert') {
+      var cert = p.certs.filter(function (c) { return c.id === r.id; })[0];
+      if (cert) items.push({ label: t('rem_received'), run: function () { receiveCert(p, cert); } });
+    }
+    [1, 3, 7].forEach(function (n) {
+      items.push({ label: t('rem_snooze', { n: n }), run: function () { var m = remMap(); m[key] = L.addDaysStr(L.todayStr(), n); remSave(m); toast(t('rem_snoozed', { n: n })); } });
+    });
+    items.push({ label: t('rem_hide'), run: function () { var m = remMap(); m[key] = 'hide'; remSave(m); toast(t('rem_hidden')); } });
+    actionSheet((r.who || r.project || '') + ' · ' + money(r.amount), items);
+  }
+
+  /* ---------- phone notifications (Android app only) ---------- */
+  var notifTimer = null;
+  function hasNative() { return !!(window.AndroidBridge && window.AndroidBridge.setNotifications); }
+  function syncNotifications() {
+    if (!hasNative()) return;
+    clearTimeout(notifTimer);
+    notifTimer = setTimeout(function () {
+      var events = [];
+      if (notifOn()) {
+        var seq = 0;
+        L.notifyPlan(state, L.todayStr(), 14, remMap()).forEach(function (e) {
+          var hm = e.time.split(':'), dp = e.date.split('-');
+          var at = new Date(Number(dp[0]), Number(dp[1]) - 1, Number(dp[2]), Number(hm[0]), Number(hm[1]), 0).getTime();
+          var title, text;
+          if (e.kind === 'summary') {
+            title = t('nt_summary_title', { n: e.n });
+            text = (e.overdue ? t('nt_overdue', { n: e.overdue }) + '. ' : '') + e.items.map(function (r) { return (r.kind === 'wages' ? t('fc_wages') : r.who || r.desc || '') + ' ' + money(r.amount); }).join(', ');
+          } else {
+            var r = e.item;
+            title = (r.kind === 'cert' ? t('nt_due_cert') : r.kind === 'wages' ? t('nt_due_wages') : t('nt_due_bill')) + (r.kind === 'wages' ? '' : ': ' + (r.who || r.desc || ''));
+            text = [r.project, r.desc, money(r.amount)].filter(Boolean).join(' · ');
+          }
+          seq++;
+          events.push({ id: seq, at: at, title: title, text: text });
+        });
+      }
+      try { window.AndroidBridge.setNotifications(JSON.stringify(events)); } catch (e) { /* ignore */ }
+    }, 1500);
+  }
+  function initNotifPanel() {
+    var pn = $('notifPanel');
+    if (!hasNative()) { pn.hidden = true; return; }
+    pn.hidden = false;
+    var cb = $('notifOn');
+    function note() {
+      var ok = true;
+      try { ok = window.AndroidBridge.notificationsAllowed(); } catch (e) { /* ignore */ }
+      $('notifNote').textContent = notifOn() && !ok ? t('nt_blocked') : t('nt_note');
+    }
+    cb.checked = notifOn();
+    note();
+    cb.addEventListener('change', function () {
+      try { localStorage.setItem(NOTIF_KEY, cb.checked ? '1' : '0'); } catch (e) { /* ignore */ }
+      if (cb.checked) { try { window.AndroidBridge.requestNotificationPermission(); } catch (e) { /* ignore */ } }
+      syncNotifications(); setTimeout(note, 1500);
+    });
+    $('notifTest').addEventListener('click', function () {
+      try { window.AndroidBridge.requestNotificationPermission(); window.AndroidBridge.testNotification(t('nt_test_title'), t('nt_test_text')); } catch (e) { /* ignore */ }
+      toast(t('nt_test_sent'));
+    });
+    $('remReset').addEventListener('click', function () { remSave({}); toast(t('rem_restored')); });
+  }
+
   function renderReminders() {
-    var list = L.reminders(state, L.todayStr(), 7);
+    var rmap = remMap(), today0 = L.todayStr();
+    var list = L.reminders(state, today0, 7).filter(function (r) { return !L.reminderHidden(rmap, L.reminderKey(r), today0); });
+    syncNotifications();
     var urgent = list.filter(function (r) { return r.level === 'overdue' || r.level === 'soon'; });
     var ban = $('remindBanner');
     ban.hidden = !urgent.length;
@@ -2853,12 +2936,13 @@
       tx.appendChild(el('small', 'muted', [r.project, r.desc, cnote, r.due ? t('due_label') + ' ' + fmtDate(r.due) : ''].filter(Boolean).join(' · ')));
       row.appendChild(tx);
       row.appendChild(el('span', 'amt ' + (r.level === 'overdue' ? 'out' : ''), money(r.amount)));
-      row.addEventListener('click', function () { ui.projectId = r.projectId; ui.section = r.kind === 'cert' ? 'client' : r.kind === 'wages' ? 'labour' : 'bills'; renderProjects(); window.scrollTo(0, 0); });
+      row.addEventListener('click', function () { reminderActions(r); });
       pn.appendChild(row);
     });
     box.appendChild(pn);
   }
-  $('remindBanner').addEventListener('click', function () { showView('projects'); renderProjects(); });
+  $('remindBanner').addEventListener('click', function () { showView('projects'); renderProjects(); renderReminders(); });
+  initNotifPanel();
 
   /* ---------- report export (Excel / PDF) for a date range ---------- */
   function exportRange() {
@@ -2973,7 +3057,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.20.3', APP_BUILD = 40;
+  var APP_VERSION = '2.21.0', APP_BUILD = 41;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

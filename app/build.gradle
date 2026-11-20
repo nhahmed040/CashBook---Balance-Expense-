@@ -10,8 +10,8 @@ android {
         applicationId 'com.nhahmed.cashbook'
         minSdk 26
         targetSdk 34
-        versionCode 40
-        versionName '2.20.3'
+        versionCode 41
+        versionName '2.21.0'
     }
 
     // A fixed key, so every build is signed the same way and a new APK can be

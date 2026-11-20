@@ -248,3 +248,8 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 ## 2.20.3
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
+
+## 2.21.0
+
+- **Reminders fixed**: opening a reminder no longer leaves the Reminders box on top of the project. Tapping a reminder now offers Open, Mark as paid / received (opens the payment form), Remind me again in 1 / 3 / 7 days, and Hide. Settings → "Show hidden reminders again" brings them back.
+- **Phone notifications** (Android app): Settings → Phone notifications. A notification at 8:00 each morning when something is overdue or due soon, and one at 9:00 on the day a bill or client payment is due. The list for the next 14 days is refreshed whenever the app is opened and survives a restart. Needs the notification permission (Android 13+); a test button is included. Uses new permissions POST_NOTIFICATIONS and RECEIVE_BOOT_COMPLETED.

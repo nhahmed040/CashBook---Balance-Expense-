@@ -1469,6 +1469,30 @@
       .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
   }
 
+  /* ---------- reminders: snooze / hide, and the phone notification plan ---------- */
+  function reminderKey(r) { return r.kind + ':' + r.projectId + ':' + r.id; }
+  /* map: key -> 'hide' (until restored) or a date (hidden until that day). */
+  function reminderHidden(map, key, today) {
+    var v = map && map[key];
+    return v === 'hide' || (isDate(v) && v > today);
+  }
+  /* What to notify about over the next days: a summary at 08:00 each day that has urgent items,
+     and up to 3 single notifications at 09:00 for items that fall due that day. */
+  function notifyPlan(state, today, days, map) {
+    var out = [];
+    for (var i = 0; i < days; i++) {
+      var d = addDaysStr(today, i);
+      var list = reminders(state, d, 3).filter(function (r) { return !reminderHidden(map, reminderKey(r), d); });
+      var urgent = list.filter(function (r) { return r.level === 'overdue' || r.level === 'soon'; });
+      if (urgent.length) {
+        out.push({ date: d, time: '08:00', kind: 'summary', n: urgent.length,
+          overdue: urgent.filter(function (r) { return r.level === 'overdue'; }).length, items: urgent.slice(0, 3) });
+      }
+      list.filter(function (r) { return r.due === d; }).slice(0, 3).forEach(function (r) { out.push({ date: d, time: '09:00', kind: 'due', item: r }); });
+    }
+    return out;
+  }
+
   /* ---------- search ---------- */
   function searchAll(state, query, limit) {
     var q = String(query || '').trim().toLowerCase(), max = limit || 8, out = { entries: [], bills: [], certs: [], contacts: [], boq: [], diary: [] };
@@ -1533,7 +1557,7 @@
   }
 
   return {
-    costSections: costSections, costBySection: costBySection, rowsToCsv: rowsToCsv, supplierStatement: supplierStatement, supplierNames: supplierNames, workerStatement: workerStatement, diaryRange: diaryRange, searchAll: searchAll, sanitizeDiary: sanitizeDiary, WEATHER: WEATHER,
+    addDaysStr: addDaysStr, reminderKey: reminderKey, reminderHidden: reminderHidden, notifyPlan: notifyPlan, costSections: costSections, costBySection: costBySection, rowsToCsv: rowsToCsv, supplierStatement: supplierStatement, supplierNames: supplierNames, workerStatement: workerStatement, diaryRange: diaryRange, searchAll: searchAll, sanitizeDiary: sanitizeDiary, WEATHER: WEATHER,
     cashForecast: cashForecast, profitOutlook: profitOutlook,
     calcEval: calcEval,
     MODES: MODES, KINDS: KINDS, STAFF_ROLES: STAFF_ROLES,

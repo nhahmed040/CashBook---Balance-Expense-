@@ -201,6 +201,14 @@
 
       <button type="button" id="aboutBtn" class="block"><span aria-hidden="true">ℹ️</span> <span data-i18n="about">About</span></button>
 
+      <div class="panel" id="notifPanel" hidden>
+        <h2>🔔 <span data-i18n="nt_title">Phone notifications</span></h2>
+        <p class="muted small" id="notifNote"></p>
+        <label class="check"><input type="checkbox" id="notifOn"> <span data-i18n="nt_on">Remind me on my phone</span></label>
+        <button type="button" id="notifTest" class="block" data-i18n="nt_test">Send a test notification</button>
+        <button type="button" id="remReset" class="block" data-i18n="rem_show_hidden">Show hidden reminders again</button>
+      </div>
+
       <div class="panel">
         <h2 data-i18n="data">Data</h2>
         <p id="backupState" class="muted small"></p>
