@@ -270,7 +270,7 @@
 
   function sanitizeBoqItem(i) {
     if (!i || typeof i !== 'object') return null;
-    var desc = str(i.desc, 400);
+    var desc = str(i.desc, 2000);
     if (!desc) return null;
     var out = {
       id: validId(i.id) ? i.id : newId(),
@@ -1266,26 +1266,30 @@
     var head = -1, idx = null, r, c;
     function cellText(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
     for (r = 0; r < Math.min(rows.length, 60) && head < 0; r++) {
-      var cur = { no: -1, desc: -1, unit: -1, qty: -1, rate: -1 };
+      var cur = { no: -1, desc: -1, unit: -1, qty: -1, rate: -1, cur: -1, todate: -1 };
       (rows[r] || []).forEach(function (h, pos) {
         h = cellText(h);
         if (!h) return;
-        if (/^(description|descr|particulars|work description|item description)/i.test(h)) { if (cur.desc < 0) cur.desc = pos; }
+        var QTY = '(qty|qnty|qu[a-z]{0,3}nti?ty)';   // also the typos seen in real sheets: Quntity, Quantty
+        if (/^(d[ei]s[a-z]{0,3}ript[a-z]*|descr|particulars|work description|item description)/i.test(h)) { if (cur.desc < 0) cur.desc = pos; }
         else if (/^(unit|uom|u\/m)\.?$/i.test(h)) { if (cur.unit < 0) cur.unit = pos; }
-        else if (/^(total\s+|contract\s+|bill\s+)?(qty|quantity)\.?$/i.test(h)) { if (cur.qty < 0) cur.qty = pos; }
-        else if (/^(unit )?(rate|price)/i.test(h)) { if (cur.rate < 0) cur.rate = pos; }
-        else if (/^(item( no\.?)?|no\.?|ref\.?|code|s\/n|sn)$/i.test(h)) { if (cur.no < 0) cur.no = pos; }
+        else if (new RegExp('^(to\\s*date|cumulative|up\\s*to\\s*date)\\s+' + QTY + '\\.?$', 'i').test(h)) { if (cur.todate < 0) cur.todate = pos; }
+        else if (new RegExp('^(current|this\\s+(month|period|bill)|executed|done)\\s+' + QTY + '\\.?$', 'i').test(h)) { if (cur.cur < 0) cur.cur = pos; }
+        else if (new RegExp('^(total\\s+|contract\\s+|bill\\s+|original\\s+)?' + QTY + '\\.?$', 'i').test(h)) { if (cur.qty < 0) cur.qty = pos; }
+        else if (/^(unit |contract )?(rate|price)/i.test(h)) { if (cur.rate < 0) cur.rate = pos; }
+        else if (/^(bill\s+|item\s+)?(item( no\.?)?|no\.?|ref\.?|code|s\/n|sn|#)$/i.test(h)) { if (cur.no < 0) cur.no = pos; }
       });
       if (cur.desc >= 0 && cur.qty >= 0 && cur.rate >= 0) { head = r; idx = cur; }
     }
     if (head < 0) return null;
     if (idx.no < 0 && idx.desc > 0) idx.no = idx.desc - 1;
+    var doneCol = idx.todate >= 0 ? idx.todate : idx.cur;
     function num(v) {
       if (typeof v === 'number') return isFinite(v) ? v : 0;
       var n = parseFloat(String(v == null ? '' : v).replace(/,/g, ''));
       return isFinite(n) ? n : 0;
     }
-    var items = [], counts = { item: 0, row: 0, line: 0, group: 0, sum: 0 }, skipped = 0;
+    var items = [], counts = { item: 0, row: 0, line: 0, group: 0, sum: 0 }, skipped = 0, withDone = 0;
     for (r = head + 1; r < rows.length; r++) {
       var row = rows[r] || [];
       var rawDesc = String(row[idx.desc] == null ? '' : row[idx.desc]);
@@ -1301,13 +1305,15 @@
       if (!desc && !no) continue;
       if (!desc) { desc = no; no = ''; }
       var low = desc.toLowerCase();
+      if (/_{3,}|^(name|signature|date)\s*:|^(contractor|site\s+supervisor|supervisor|approved\s+by|prepared\s+by|checked\s+by|client|consultant)\s*(\/.*)?$/.test(low) && !(qty > 0 && rate > 0)) continue;   // signature block under the table
       var it = null, kind;
       if (/carried\s+to\s+summary|^(sub\s*-?\s*)?total\s+(to\s+)?summary/.test(low)) {
         kind = 'sum'; it = { kind: 'sum', desc: desc.replace(/\.{2,}.*$/, '').replace(/[:.\s]+$/, '') };
       } else if (/^(grand\s+total|total\b|sub\s*-?\s*total|vat\b|\d+\s*%\s*vat|contingenc)/.test(low) && !(qty > 0 && rate > 0)) {
         skipped++; continue;
       } else if (qty > 0 && rate > 0) {
-        kind = 'item'; it = { no: no, desc: desc, unit: unit, qty: qty, rate: rate };
+        kind = 'item'; it = { no: no, desc: desc, unit: unit, qty: qty, rate: rate, done: doneCol >= 0 ? Math.max(0, num(row[doneCol])) : 0 };
+        if (it.done > 0) withDone++;
       } else if (!no && !unit && /^[A-Z]\s*[.)]\s+\S/.test(desc)) {
         kind = 'group'; it = { kind: 'group', desc: desc };
       } else if (/^\d{1,2}\s*\.?$/.test(no) && !unit && !(qty > 0) && !(rate > 0)) {
@@ -1322,7 +1328,7 @@
       counts[kind]++;
       items.push({ item: clean, type: kind });
     }
-    return { items: items.slice(0, 3000), counts: counts, skipped: skipped, headerRow: head + 1 };
+    return { items: items.slice(0, 3000), counts: counts, skipped: skipped, headerRow: head + 1, withDone: withDone, hasDoneCol: doneCol >= 0 };
   }
 
   /* Calculator: + - * / (also x, ×, ÷, −), brackets, decimals, unary minus, and "%" after a number. NaN when it does not make sense. */

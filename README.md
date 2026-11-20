@@ -249,6 +249,10 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
+## 2.21.1
+
+- **Excel BoQ import reads real-world sheets**: misspelt headers (“Discription”, “Quntity”), “Bill No” columns, signature blocks under the table, and descriptions up to 2,000 characters (they were cut at 400). “Current Quantity” / “To date quantity” columns are imported as work done (tick box in the preview).
+
 ## 2.21.0
 
 - **Reminders fixed**: opening a reminder no longer leaves the Reminders box on top of the project. Tapping a reminder now offers Open, Mark as paid / received (opens the payment form), Remind me again in 1 / 3 / 7 days, and Hide. Settings → "Show hidden reminders again" brings them back.

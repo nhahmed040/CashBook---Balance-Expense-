@@ -1585,7 +1585,7 @@
   /* Excel BoQ import: pick the sheet, check the detected row types, then replace or add */
   function boqImportPreview(p, sheets) {
     var ov = el('div', 'overlay open sheetov'), m = el('div', 'modal importmodal');
-    var cur = 0, mode = p.boq.length ? 'replace' : 'add';
+    var cur = 0, mode = p.boq.length ? 'replace' : 'add', withDone = true;
     function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
     var TAG = { item: 'rt_item', row: 'rt_note', line: 'rt_line', sum: 'rt_sum', group: 'rt_group' };
     function draw() {
@@ -1610,11 +1610,18 @@
         r.appendChild(el('span', 'boqtag', t(TAG[x.type])));
         var tx = el('span', 'stext');
         tx.appendChild(el('b', null, (x.item.no ? x.item.no + ' ' : '') + x.item.desc));
-        if (x.type === 'item') tx.appendChild(el('small', 'muted', x.item.qty + ' ' + x.item.unit + ' × ' + x.item.rate));
+        if (x.type === 'item') tx.appendChild(el('small', 'muted', x.item.qty + ' ' + x.item.unit + ' × ' + x.item.rate + (withDone && x.item.done > 0 ? ' · ' + t('import_qty_done') + ' ' + x.item.done : '')));
         r.appendChild(tx);
         list.appendChild(r);
       });
       m.appendChild(list);
+      if (res.withDone) {
+        var dl = el('label', 'check'), dc = el('input');
+        dc.type = 'checkbox'; dc.checked = withDone;
+        dc.addEventListener('change', function () { withDone = dc.checked; draw(); });
+        dl.appendChild(dc); dl.appendChild(el('span', null, ' ' + t('import_with_done', { n: res.withDone })));
+        m.appendChild(dl);
+      }
       if (p.boq.length) {
         var opts = el('div', 'impmode');
         [['replace', 'import_replace'], ['add', 'import_add']].forEach(function (o) {
@@ -1629,7 +1636,7 @@
       m.appendChild(btn(t('import_do'), 'block primary', function () {
         if (mode === 'replace' && p.boq.length && !window.confirm(t('import_replace_confirm', { name: p.name, n: p.boq.length }))) return;
         var before = p.boq.slice();
-        var next = res.items.map(function (x) { var i = x.item; i.id = L.newId(); return i; });
+        var next = res.items.map(function (x) { var i = x.item; i.id = L.newId(); if (!withDone) i.done = 0; return i; });
         p.boq = (mode === 'replace' ? next : p.boq.concat(next)).slice(0, 3000);
         p.boqLines = 2;
         save(); renderAll(); close();
@@ -3057,7 +3064,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.21.0', APP_BUILD = 41;
+  var APP_VERSION = '2.21.1', APP_BUILD = 42;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
