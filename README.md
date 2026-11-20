@@ -236,3 +236,7 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - **Certificate lock**: only the latest certificate can be a draft. A draft follows the live progress; a **Refresh from progress** button recalculates its quantities and amount, and Update progress offers it after saving. Submitted, approved and paid certificates, and every earlier certificate, are locked: their quantities are frozen and new progress counts for the next payment. "Previous" in Update progress now comes from the last locked certificate, and a BoQ item's done quantity cannot be set below it. Only the latest certificate can be set back to Draft (with a confirmation). Submitting a draft whose progress changed asks whether to refresh it first.
 - **Certificate Excel, BoQ sheet**: summary line rows no longer show totals; the totals stay on the "Total carried to summary" rows.
+
+## 2.20.1
+
+- Update progress: the section heading no longer overlaps the item text when scrolling, and the explanation line is one line so the item list gets more room.

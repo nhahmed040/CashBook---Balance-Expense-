@@ -574,7 +574,7 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 
 /* progress screen */
 .progList { max-height: 46vh; }
-.progHead { padding: 6px 8px; font-weight: 700; background: rgba(90,79,240,.10); position: sticky; top: 0; font-size: .85rem; }
+.progHead { padding: 6px 8px; font-weight: 700; background: linear-gradient(rgba(90,79,240,.12), rgba(90,79,240,.12)), var(--surface); position: sticky; top: 0; z-index: 3; font-size: .85rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid rgba(128,128,128,.3); }
 .progRow { align-items: center; }
 .progRow .stext { flex: 1; }
 .progIn { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
