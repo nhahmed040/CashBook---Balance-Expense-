@@ -240,3 +240,7 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 ## 2.20.1
 
 - Update progress: the section heading no longer overlaps the item text when scrolling, and the explanation line is one line so the item list gets more room.
+
+## 2.20.2
+
+- Update progress: tiny leftover differences (under 0.005, such as 0.002) are no longer shown in the Current box, and saving no longer changes quantities you did not touch. Quantities keep 6 decimals instead of being rounded to 2.

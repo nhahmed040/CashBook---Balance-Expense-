@@ -907,7 +907,8 @@
       if (L.isGroupRow(it) || L.isLineRow(it)) head = it.desc;
       else if (L.isItemRow(it)) rows.push({ it: it, head: head });
     });
-    rows.forEach(function (r) { var c = L.round6 ? L.round6(r.it.done - prevOf(r.it)) : r.it.done - prevOf(r.it); if (c > 0) vals[r.it.id] = c; });
+    /* differences under 0.005 are rounding leftovers, not work: leave the box empty */
+    rows.forEach(function (r) { var c = L.round6(r.it.done - prevOf(r.it)); if (c >= 0.005) vals[r.it.id] = c; });
     function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
     var summaryBox = el('div', 'panel'), listBox = el('div', 'importlist progList');
     function todayVal(it) { var v = vals[it.id]; return v == null || v === '' || isNaN(v) ? 0 : Number(v); }
@@ -967,7 +968,8 @@
     function apply() {
       var n = 0;
       rows.forEach(function (r) {
-        var nd = L.round2(prevOf(r.it) + todayVal(r.it));
+        var tv = todayVal(r.it), nd = L.round6(prevOf(r.it) + tv);
+        if (tv === 0 && Math.abs(r.it.done - prevOf(r.it)) < 0.005) return;
         if (Math.abs(nd - r.it.done) > 1e-9) { r.it.done = nd; n++; }
       });
       return n;
@@ -2971,7 +2973,7 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.20.1', APP_BUILD = 38;
+  var APP_VERSION = '2.20.2', APP_BUILD = 39;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
