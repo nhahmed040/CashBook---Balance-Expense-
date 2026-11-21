@@ -2620,6 +2620,13 @@
     if (hasPhoneBook) sel.appendChild(option('__phone', t('phonebook_opt')));
     sel.value = current && byId(state.contacts, current) ? String(current) : '';
     sel._prev = sel.value;
+    updateCallLink();
+  }
+  function updateCallLink() {
+    var a = $('contactCall'), c = byId(state.contacts, Number($('contactSel').value) || 0);
+    var num = c && c.phone ? c.phone.replace(/[^0-9+]/g, '') : '';
+    a.hidden = !num;
+    if (num) { a.href = 'tel:' + num; a.textContent = '📞 ' + t('call') + ' ' + c.name + ' · ' + c.phone; }
   }
 
   /* ---- phone book (Android contact picker; there is none in a plain browser) ---- */
@@ -2661,6 +2668,7 @@
       return;
     }
     sel._prev = sel.value;
+    updateCallLink();
     var c = byId(state.contacts, Number(sel.value));
     if (c) applyContactToParty(c);
   });
@@ -3025,7 +3033,7 @@
     return 'handled';
   };
 
-  var APP_VERSION = '2.23.0', APP_BUILD = 44;
+  var APP_VERSION = '2.23.1', APP_BUILD = 45;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

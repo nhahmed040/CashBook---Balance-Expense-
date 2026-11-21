@@ -605,3 +605,6 @@ body.view-entries.books-home #bookBtn, body.view-entries.books-home .fab { displ
 .progfoot .primary { flex-basis: 100%; order: -1; }
 
 .progmodal > p.progcols { display: block; margin: 0; font-size: .72rem; color: var(--muted); }
+
+.calllink { display: block; padding: 6px 2px; font-size: 0.95rem; text-decoration: none; }
+.calllink[hidden] { display: none; }

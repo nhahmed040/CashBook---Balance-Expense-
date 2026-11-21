@@ -249,6 +249,10 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
+## 2.23.1
+
+- Picking a contact with a phone number on an entry shows a **📞 Call** link that opens the dialer.
+
 ## 2.23.0
 
 - **Contacts tab removed.** On an entry the Contact field is now only a picker: contacts you already saved, **app users** (people who share a book or project with you – remembered for offline use) and, on Android, your **phone book**. Existing contacts, entry links, the contact filter and the “By contact” report keep working.
