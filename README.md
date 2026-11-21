@@ -249,6 +249,10 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
+## 2.23.0
+
+- **Contacts tab removed.** On an entry the Contact field is now only a picker: contacts you already saved, **app users** (people who share a book or project with you – remembered for offline use) and, on Android, your **phone book**. Existing contacts, entry links, the contact filter and the “By contact” report keep working.
+
 ## 2.22.0
 
 - **Android Back button** now behaves the same everywhere: it closes the top sheet or dialog first (asking “Discard changes?” only if you typed something), then goes up one level (project section → project → list; other tabs → Entries; open book → books home). On the home screen the first press shows “Press Back again to exit”; the second, within 2 seconds, closes the app. On the PIN screen Back only hides the app.

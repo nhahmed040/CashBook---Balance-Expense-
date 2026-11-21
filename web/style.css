@@ -457,7 +457,6 @@ button.google .gmark { font-size: 1.15rem; background: linear-gradient(90deg, #4
 .remrow.overdue .stext b { color: #dc2626; }
 .remrow.soon .stext b { color: #ea580c; }
 #bizSelect { max-width: 34vw; }
-body.view-contacts .fab { display: none; }
 details.more { display: flex; flex-direction: column; gap: 8px; }
 details.more > summary { cursor: pointer; font-size: .85rem; color: var(--accent); font-weight: 600; padding: 4px 0; list-style: none; }
 details.more > summary::-webkit-details-marker { display: none; }

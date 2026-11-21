@@ -1223,7 +1223,7 @@
     function render() {
       out.textContent = '';
       var r = L.searchAll(state, inp.value, 8);
-      var total = r.entries.length + r.bills.length + r.certs.length + r.contacts.length + r.boq.length + r.diary.length;
+      var total = r.entries.length + r.bills.length + r.certs.length + r.boq.length + r.diary.length;
       if (inp.value.trim().length >= 2 && !total) out.appendChild(el('p', 'muted small', t('search_none')));
       group(t('entries'), r.entries.length);
       r.entries.forEach(function (x) {
@@ -1239,8 +1239,6 @@
       r.boq.forEach(function (x) { line((x.item.no || '') + ' ' + x.item.desc, x.project, '', function () { goProject(x.projectId, 'boq'); }); });
       group(t('diary'), r.diary.length);
       r.diary.forEach(function (x) { line(fmtDate(x.entry.date) + ' · ' + (x.entry.work || x.entry.problems || ''), x.project, '', function () { goProject(x.projectId, 'diary'); }); });
-      group(t('contacts'), r.contacts.length);
-      r.contacts.forEach(function (c) { line(c.name, [c.phone, c.email].filter(Boolean).join(' · '), '', function () { close(); showView('contacts'); renderAll(); }); });
     }
     inp.addEventListener('input', render);
     ov.appendChild(m);
@@ -2342,7 +2340,6 @@
     applyEntriesScreen();
     renderEntries();
     renderProjects();
-    renderContacts();
     renderReports();
     renderSettings();
     renderBiz();
@@ -2351,14 +2348,14 @@
     if (window.__renderCloud) window.__renderCloud();
   }
 
-  var VIEWS = ['entries', 'contacts', 'projects', 'reports', 'settings'];
+  var VIEWS = ['entries', 'projects', 'reports', 'settings'];
   function showView(name) {
     ui.view = name;
     VIEWS.forEach(function (v) { $('view-' + v).hidden = v !== name; });
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.classList.toggle('active', b.getAttribute('data-view') === name);
     });
-    document.body.classList.remove('view-entries', 'view-contacts', 'view-projects', 'view-reports', 'view-settings');
+    document.body.classList.remove('view-entries', 'view-projects', 'view-reports', 'view-settings');
     document.body.classList.add('view-' + name);
     applyEntriesScreen();
     window.scrollTo(0, 0);
@@ -2611,13 +2608,23 @@
     state.contacts.slice().sort(function (a, c) { return a.name.localeCompare(c.name); }).forEach(function (c) {
       sel.appendChild(option(String(c.id), c.name + (c.phone ? ' · ' + c.phone : '')));
     });
+    var users = appUsers().filter(function (u) {
+      return !state.contacts.some(function (c) { return u.email && c.email && c.email.toLowerCase() === u.email.toLowerCase(); });
+    });
+    if (users.length) {
+      var og = document.createElement('optgroup');
+      og.label = t('app_users');
+      users.forEach(function (u) { og.appendChild(option('u:' + u.uid, (u.name || u.email) + (u.name && u.email ? ' · ' + u.email : ''))); });
+      sel.appendChild(og);
+    }
     if (hasPhoneBook) sel.appendChild(option('__phone', t('phonebook_opt')));
-    sel.appendChild(option('__new', t('new_contact_opt')));
     sel.value = current && byId(state.contacts, current) ? String(current) : '';
     sel._prev = sel.value;
   }
 
   /* ---- phone book (Android contact picker; there is none in a plain browser) ---- */
+  /* people who share a book or project with you (filled in by the sync code; remembered for offline use) */
+  function appUsers() { try { return window.__appUsers ? window.__appUsers() : []; } catch (e) { return []; } }
   var hasPhoneBook = !!(window.AndroidBridge && typeof window.AndroidBridge.pickContact === 'function');
   var phonePick = null;
   function digits(v) { return String(v || '').replace(/\D/g, ''); }
@@ -2643,9 +2650,14 @@
       pickFromPhone(function (c) { fillContactSel(c.id); applyContactToParty(c); });
       return;
     }
-    if (sel.value === '__new') {
+    if (sel.value.indexOf('u:') === 0) {
+      var uid = sel.value.slice(2), u = appUsers().filter(function (x) { return x.uid === uid; })[0];
       sel.value = sel._prev || '';
-      editContact(null, function (c) { fillContactSel(c.id); applyContactToParty(c); });
+      if (!u) return;
+      var nc = L.sanitizeContact({ id: L.newId(), name: u.name || u.email, email: u.email, kind: 'other' });
+      if (!nc) return;
+      state.contacts.push(nc); save();
+      fillContactSel(nc.id); applyContactToParty(nc);
       return;
     }
     sel._prev = sel.value;
@@ -2653,109 +2665,6 @@
     if (c) applyContactToParty(c);
   });
   function applyContactToParty(c) { if (c && !$('entryProject').hidden) $('party').value = c.name; }
-
-  function kindOptions(withAll) {
-    var o = withAll ? [option('all', t('all_kinds'))] : [];
-    L.KINDS.forEach(function (k) { o.push(option(k, t('kind_' + k))); });
-    return o;
-  }
-
-  function editContact(contact, done) {
-    var isNew = !contact;
-    var c = contact || { name: '', phone: '', email: '', address: '', kind: 'customer', note: '' };
-    openForm({
-      title: isNew ? t('add_contact') : t('edit_contact'),
-      fields: [
-        { key: 'name', label: t('contact_name'), type: 'text', value: c.name, required: true },
-        { key: 'kind', label: t('contact_kind'), type: 'select', options: L.KINDS.map(function (k) { return { value: k, label: t('kind_' + k) }; }), value: c.kind },
-        { key: 'phone', label: t('contact_phone'), type: 'text', value: c.phone, max: 30 },
-        { key: 'email', label: t('contact_email'), type: 'text', value: c.email },
-        { key: 'address', label: t('contact_address'), type: 'text', value: c.address, max: 80 },
-        { key: 'note', label: t('contact_note'), type: 'text', value: c.note, max: 80 }
-      ],
-      onSubmit: function (v) {
-        var nc = L.sanitizeContact({ id: contact ? contact.id : L.newId(), name: v.name, kind: v.kind, phone: v.phone, email: v.email, address: v.address, note: v.note });
-        if (!nc) return t('required');
-        if (isNew) state.contacts.push(nc); else Object.keys(nc).forEach(function (k) { contact[k] = nc[k]; });
-        var saved = isNew ? nc : contact;
-        // entries keep the contact's name in their payee text so searches and exports match
-        if (!isNew) state.books.forEach(function (b) { b.entries.forEach(function (e) { if (e.contactId === saved.id) e.party = saved.name; }); });
-        save(); renderAll();
-        if (done) done(saved);
-        return null;
-      },
-      onDelete: isNew ? null : function () {
-        if (!window.confirm(t('confirm_delete_contact'))) return false;
-        trashPut('contact', contact.name, contact, {});
-        state.books.forEach(function (b) { b.entries.forEach(function (e) { if (e.contactId === contact.id) e.contactId = 0; }); });
-        state.contacts = state.contacts.filter(function (x) { return x.id !== contact.id; });
-        if (ui.contactId === contact.id) ui.contactId = 0;
-        save(); renderAll(); undoToast();
-        return true;
-      }
-    });
-  }
-
-  function renderContacts() {
-    var sel = $('ckind');
-    var keep = ui.ckind;
-    sel.textContent = '';
-    kindOptions(true).forEach(function (o) { sel.appendChild(o); });
-    sel.value = keep;
-    var bal = L.contactBalances(state);
-    var q = ui.cq.trim().toLowerCase();
-    var list = state.contacts.filter(function (c) {
-      if (ui.ckind !== 'all' && c.kind !== ui.ckind) return false;
-      return !q || (c.name + ' ' + c.phone + ' ' + c.email + ' ' + c.address).toLowerCase().indexOf(q) >= 0;
-    }).sort(function (a, c) { return a.name.localeCompare(c.name); });
-    var ul = $('contactList');
-    ul.textContent = '';
-    var tin = 0, tout = 0;
-    list.forEach(function (c) {
-      var b = bal[c.id];
-      tin += b.cashIn; tout += b.cashOut;
-      var li = el('li', 'item contact');
-      li.tabIndex = 0;
-      li.setAttribute('role', 'button');
-      li.appendChild(el('span', 'avatar', c.name.charAt(0).toUpperCase()));
-      var meta = el('div', 'meta');
-      meta.appendChild(el('div', 'title', c.name));
-      meta.appendChild(el('div', 'detail', [t('kind_' + c.kind), c.phone, b.count ? t('entries_n', { n: b.count }) : ''].filter(Boolean).join(' · ')));
-      if (b.count) meta.appendChild(el('div', 'detail', t('received_total') + ' ' + money(b.cashIn) + ' · ' + t('paid_total') + ' ' + money(b.cashOut)));
-      li.appendChild(meta);
-      var side = el('div', 'cside');
-      if (b.count) side.appendChild(el('span', 'amt ' + (b.net >= 0 ? 'in' : 'out'), (b.net >= 0 ? '+' : '−') + money(Math.abs(b.net))));
-      var acts = el('div', 'cacts');
-      if (c.phone) { var a1 = el('a', null, '📞'); a1.href = 'tel:' + c.phone.replace(/[^0-9+]/g, ''); a1.addEventListener('click', function (ev) { ev.stopPropagation(); }); acts.appendChild(a1); }
-      if (c.email) { var a2 = el('a', null, '✉️'); a2.href = 'mailto:' + c.email; a2.addEventListener('click', function (ev) { ev.stopPropagation(); }); acts.appendChild(a2); }
-      if (b.count) {
-        var a3 = el('a', null, '🔎');
-        a3.href = '#';
-        a3.addEventListener('click', function (ev) {
-          ev.preventDefault(); ev.stopPropagation();
-          ui.contactId = c.id; ui.q = ''; $('q').value = '';
-          showView('entries'); renderEntries();
-        });
-        acts.appendChild(a3);
-      }
-      side.appendChild(acts);
-      li.appendChild(side);
-      var open = function () { editContact(c); };
-      li.addEventListener('click', open);
-      li.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
-      ul.appendChild(li);
-    });
-    $('contactEmpty').hidden = list.length > 0;
-    $('contactEmpty').textContent = state.contacts.length ? t('no_match') : t('no_contacts');
-    $('contactTotals').textContent = list.length ? t('contacts_summary', { n: list.length, i: money(tin), o: money(tout) }) : '';
-  }
-  $('cq').addEventListener('input', function () { ui.cq = this.value; renderContacts(); });
-  $('ckind').addEventListener('change', function () { ui.ckind = this.value; renderContacts(); });
-  $('addContact').addEventListener('click', function () { editContact(null); });
-  $('pickContact').hidden = !hasPhoneBook;
-  $('pickContact').addEventListener('click', function () {
-    pickFromPhone(function (c) { toast(c.name); editContact(c); });
-  });
 
   /* ---------- businesses and staff ---------- */
   function renderBiz() {
@@ -3013,7 +2922,6 @@
       showView(v);
       if (v === 'reports') renderReports();
       if (v === 'projects') renderProjects();
-      if (v === 'contacts') renderContacts();
     });
   });
 
@@ -3117,7 +3025,7 @@
     return 'handled';
   };
 
-  var APP_VERSION = '2.22.0', APP_BUILD = 43;
+  var APP_VERSION = '2.23.0', APP_BUILD = 44;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
@@ -3508,6 +3416,24 @@
       return data.meta.owner === me ? 'owner' : (data.members && data.members[me] && data.members[me].role) || null;
     }
     function others(id) { var i = info[id]; return i ? Object.keys(i.members || {}).length : 0; }
+    /* everyone who shares a book or project with you (members and owners, not you), remembered on this phone for offline use */
+    window.__appUsers = function () {
+      var me = '', out = {}, cache = [];
+      try { me = cloud.cfg().uid || ''; } catch (e) {}
+      try { cache = JSON.parse(localStorage.getItem('cashbook.users.v1') || '[]'); } catch (e) {}
+      cache.forEach(function (u) { if (u && u.uid && u.uid !== me) out[u.uid] = u; });
+      function add(uid, name, email) { if (uid && uid !== me && (name || email)) out[uid] = { uid: uid, name: String(name || '').slice(0, 60), email: String(email || '').slice(0, 80) }; }
+      [info, pinfo].forEach(function (src) {
+        Object.keys(src || {}).forEach(function (id) {
+          var d = src[id] || {};
+          if (d.meta) add(d.meta.owner, d.meta.ownerName, d.meta.ownerEmail);
+          Object.keys(d.members || {}).forEach(function (uid) { var m = d.members[uid] || {}; add(uid, m.name, m.email); });
+        });
+      });
+      var list = Object.keys(out).map(function (k) { return out[k]; }).sort(function (a, b) { return (a.name || a.email).localeCompare(b.name || b.email); });
+      try { localStorage.setItem('cashbook.users.v1', JSON.stringify(list.slice(0, 200))); } catch (e) {}
+      return list;
+    };
 
     /* icon in front of the book name: cloud = only mine, people = shared, eye = view only, phone = not synced */
     window.__myName = function () { var c = cloud.cfg(); return (c && c.profile && c.profile.name) || ''; };
