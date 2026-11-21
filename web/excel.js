@@ -380,6 +380,58 @@
     return { name: 'Certificate', cols: [2.6, 24.7, 16, 17.3, 9.1, 34.4, 26.9, 21.6], rows: rows, merges: merges, heights: heights, hideGrid: true };
   }
 
+  /* Advance payment certificate: one sheet only (no Summary, BOQ or Variation Order sheets). */
+  function advanceSheet(p) {
+    var rows = [], merges = [], heights = {};
+    function put(r, c, v) { while (rows.length < r) rows.push(null); if (!rows[r - 1]) rows[r - 1] = []; rows[r - 1][c] = v; }
+    var B = 1, Cc = 2, D = 3;
+    var base = { font: C, sz: 12 };
+    var bold = st({ b: true }, base);
+    var box = st({ border: 'medium' }, base), boxB = st({ b: true }, box);
+    var boxN = st({ fmt: MONEY, h: 'right', border: 'medium' }, base), boxNB = st({ b: true }, boxN);
+    var head = st({ fill: HEAD_FILL, h: 'center' }, boxB);
+    var a = L.advanceCalc(p), vp = p.vat / 100;
+
+    put(3, B, { v: 'ADVANCE PAYMENT CERTIFICATE', s: st({ b: true, sz: 18, h: 'center', border: 'thick', fill: HEAD_FILL }, base) });
+    put(3, Cc, { s: st({ border: 'thick', fill: HEAD_FILL }, base) }); put(3, D, { s: st({ border: 'thick', fill: HEAD_FILL }, base) });
+    merges.push('B3:D3'); heights[3] = 30;
+    var lab = st({ b: true, sz: 14, h: 'right' }, base), val = st({ b: true, sz: 14, h: 'left' }, base);
+    [['Project :', p.name], ['Client :', p.client], ['Contractor :', p.contractor], ['Location :', p.location]].forEach(function (x, i) {
+      put(5 + i, B, { v: x[0], s: lab }); put(5 + i, Cc, { v: x[1], s: val }); merges.push('C' + (5 + i) + ':D' + (5 + i));
+    });
+
+    put(10, B, { v: 'Description', s: head }); put(10, Cc, { v: 'Rate', s: head }); put(10, D, { v: 'Amount (Birr)', s: head });
+    var live = p.contractSum > 0;   // an advance typed as an amount on a project without a contract sum has no formula to live from
+    var lines = [
+      ['Main contract (before VAT)', null, live ? { v: p.contractSum } : { v: '-' }],
+      ['Advance payment', live ? p.advancePct / 100 : null, live ? { f: 'D11*C12', v: a.base } : { v: a.base }],
+      ['VAT', vp, { f: 'D12*C13', v: a.vat }],
+      ['Net payable (Advance + VAT)', null, { f: 'D12+D13', v: a.payable }, true],
+      ['Withholding tax', p.wht / 100, { f: '-D12*C15', v: -a.wht }],
+      ['VAT withheld', (p.vatWhtPct == null ? 50 : p.vatWhtPct) / 100, { f: '-D13*C16', v: -a.vatWht }],
+      ['Cash to receive', null, { f: 'D14+D15+D16', v: a.cashDue }, true]
+    ];
+    var pctSt = st({ fmt: '0.0%', h: 'center', border: 'medium' }, base);
+    lines.forEach(function (x, i) {
+      var r = 11 + i;
+      put(r, B, { v: x[0], s: x[3] ? boxB : box });
+      put(r, Cc, x[1] == null ? { s: box } : { v: x[1], s: pctSt });
+      put(r, D, { v: x[2].v, f: x[2].f, s: x[3] ? st({ fill: HEAD_FILL }, boxNB) : boxN });
+    });
+    put(19, B, { v: 'Withholding tax receipt No.', s: box }); put(19, Cc, { v: p.advRecv.wht || '', s: box }); put(19, D, { s: box }); merges.push('C19:D19');
+    put(20, B, { v: 'VAT withheld receipt No.', s: box }); put(20, Cc, { v: p.advRecv.vatWht || '', s: box }); put(20, D, { s: box }); merges.push('C20:D20');
+    put(22, B, { v: 'We certify that the contractor' + (p.contractor ? ' (' + p.contractor + ')' : '') + ' is entitled to an advance payment of Birr (' + L.amountWords(a.payable) + ').', s: st({ b: true, sz: 12, wrap: true, v: 'top' }, base) });
+    merges.push('B22:D22'); heights[22] = 40;
+    put(25, B, { v: p.contractor ? 'Certified by: ' + p.contractor : 'Certified by:______________________', s: bold }); put(25, D, { v: 'Approved by', s: st({ b: true, h: 'right' }, base) });
+    put(26, B, { v: 'Signature:____________', s: bold }); put(26, D, { v: 'Signature : ______________', s: st({ b: true, h: 'right' }, base) });
+    put(27, B, { v: 'Date_______________', s: bold }); put(27, D, { v: 'Date : ______________', s: st({ b: true, h: 'right' }, base) });
+    return { name: 'Advance Payment', cols: [2.6, 44, 14, 30], rows: rows, merges: merges, heights: heights, hideGrid: true };
+  }
+  function advanceWorkbook(project) {
+    var p = prep(project);
+    return { sheets: [advanceSheet(p)] };
+  }
+
   function prep(p) {
     // normalise a project so the builders can rely on every field being present
     return L.sanitizeProject(JSON.parse(JSON.stringify(p)), 1);
@@ -472,6 +524,6 @@
   function toBytes(wb) { return X.build(wb); }
 
   return {
-    certificateWorkbook: certificateWorkbook, boqWorkbook: boqWorkbook, reportWorkbook: reportWorkbook, toBytes: toBytes
+    certificateWorkbook: certificateWorkbook, advanceWorkbook: advanceWorkbook, boqWorkbook: boqWorkbook, reportWorkbook: reportWorkbook, toBytes: toBytes
   };
 });

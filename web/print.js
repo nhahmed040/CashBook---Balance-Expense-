@@ -153,6 +153,24 @@
     return page(title, d.lang, h);
   }
 
+  /* Advance payment certificate: d = { t, money, lang, project, calc (L.advanceCalc), date, fmt } */
+  function advanceHtml(d) {
+    var p = d.project, k = d.calc, t = d.t, m = d.money, fd = d.fmt || function (x) { return x; };
+    var h = '<h1>' + esc(t('adv_cert_title')) + '</h1><p class="sub">' + esc(p.name) + '</p>';
+    h += metaRows([[t('client_name'), p.client], [t('contractor_name'), p.contractor], [t('location'), p.location], [t('contract_sum'), m(p.contractSum)], [t('prepared'), fd(d.date)]]);
+    h += '<table>';
+    h += row(t('adv_before_vat') + ' (' + p.advancePct + '%)', m(k.base));
+    h += row('+ ' + t('vat_amt') + ' (' + p.vat + '%)', m(k.vat));
+    h += row(t('payable'), m(k.payable), 'total');
+    h += '</table><h2>' + esc(t('pay_to_contractor')) + '</h2><table>';
+    h += row('− ' + t('wht_amt') + ' (' + p.wht + '%)', m(k.wht));
+    h += row('− ' + t('vat_wht_amt') + ' (' + p.vatWhtPct + '% ' + t('of_vat') + ')', m(k.vatWht));
+    h += row(t('cash_due'), m(k.cashDue), 'total');
+    h += '</table>';
+    h += signatures(d);
+    return page(t('adv_cert_title'), d.lang, h);
+  }
+
   /* d: { t, money, lang, project, summary, codes:[...], codeLabel(c), suppliers:[{supplier,balance}], date, certCalcs:[{cert,calc}], wages } */
   function statementHtml(d) {
     var p = d.project, s = d.summary, t = d.t, m = d.money;
@@ -251,5 +269,5 @@
     return page(d.title, d.lang, h);
   }
 
-  return { esc: esc, certificateHtml: certificateHtml, statementHtml: statementHtml, reportHtml: reportHtml, tableHtml: tableHtml };
+  return { esc: esc, certificateHtml: certificateHtml, advanceHtml: advanceHtml, statementHtml: statementHtml, reportHtml: reportHtml, tableHtml: tableHtml };
 });

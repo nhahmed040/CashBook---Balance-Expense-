@@ -186,6 +186,30 @@
     return { pct: pct, amount: amount };
   }
 
+  /* Advance payment as a payment of its own: the client pays it once, with VAT, and withholds tax like on a certificate
+     (no retention). Receipts, the two tax receipt numbers and the "counted as received earlier" flag live in one
+     object so they sync with the project. Projects that already had an advance before this existed start as
+     "assumed received", so none of their balances change; recording a receipt switches that off. */
+  function sanitizeAdvRecv(a, assumed) {
+    a = a && typeof a === 'object' ? a : {};
+    return { receipts: mapList(a.receipts, sanitizePayment, 100), wht: str(a.wht, 30), vatWht: str(a.vatWht, 30), assumed: a.assumed === undefined ? !!assumed : !!a.assumed };
+  }
+  function advanceCalc(p) {
+    var r = p.advRecv || { receipts: [], wht: '', vatWht: '', assumed: false };
+    var payable = round2(num(p.advance, 0)), vp = num(p.vat, 0, 100);
+    var vat = round2(payable * vp / (100 + vp)), base = round2(payable - vat);
+    var wht = round2(base * num(p.wht, 0, 100) / 100);
+    var vatWht = round2(vat * (p.vatWhtPct == null ? 50 : p.vatWhtPct) / 100);
+    var received = sum(r.receipts, function (x) { return x.amount; });
+    var settled = round2((r.wht ? wht : 0) + (r.vatWht ? vatWht : 0));
+    var assumed = !!r.assumed && received <= 0;
+    return {
+      base: base, vat: vat, payable: payable, wht: wht, vatWht: vatWht, cashDue: round2(payable - wht - vatWht),
+      received: received, taxSettled: settled, assumed: assumed,
+      balance: payable <= 0 || assumed ? 0 : round2(payable - settled - received)
+    };
+  }
+
   function sanitizeVariation(v) {
     if (!v || typeof v !== 'object') return null;
     var desc = str(v.desc, 120);
@@ -318,6 +342,7 @@
       payDays: p.payDays == null || p.payDays === '' ? CERT_PAY_DAYS : Math.round(num(p.payDays, 1, 365)),
       advance: adv.amount,
       advancePct: adv.pct,
+      advRecv: sanitizeAdvRecv(p.advRecv, adv.amount > 0),
       recoveryPct: num(p.recoveryPct == null ? 20 : p.recoveryPct, 0, 100),
       vatWhtPct: num(p.vatWhtPct == null ? 50 : p.vatWhtPct, 0, 100),
       variation: num(p.variation, 0),
@@ -744,6 +769,8 @@
           out.push({ kind: 'cert', projectId: p.id, project: p.name, id: c.id, who: c.no, desc: '', note: note, status: st, due: '', amount: bal, level: level });
         }
       });
+      var adc = advanceCalc(p);
+      if (adc.balance > 0) out.push({ kind: 'advance', projectId: p.id, project: p.name, id: 0, who: '', desc: '', note: 'advance', due: '', amount: adc.balance, level: p.startDate && p.startDate < today && daysSince(p.startDate, today) >= 14 ? 'overdue' : 'later' });
       var un = p.attendance.filter(function (a) { return !a.paid; });
       if (un.length) {
         var oldest = un.reduce(function (m, a) { return a.date < m ? a.date : m; }, un[0].date), dw = daysSince(oldest, today);
@@ -869,6 +896,7 @@
     var payableTotal = sum(calcs, function (c) { return c.payable; });
     var receivedCerts = sum(calcs, function (c) { return c.received; });
     var advanceRecovered = sum(calcs, function (c) { return c.advanceRecovery; });
+    var ac = advanceCalc(p);
     var wagesUnpaid = sum(p.attendance, function (a) { return a.paid ? 0 : a.days * a.rate; });
     var bq = boqSummary(p);
 
@@ -880,10 +908,11 @@
       advance: p.advance, advanceRecovered: advanceRecovered, advanceBalance: round2(p.advance - advanceRecovered),
       payableTotal: payableTotal,
       received: round2(p.advance + payableTotal),
-      vatTotal: sum(calcs, function (c) { return c.vat; }), whtTotal: sum(calcs, function (c) { return c.wht; }), vatWhtTotal: sum(calcs, function (c) { return c.vatWht; }),
+      advCalc: ac,
+      vatTotal: round2(sum(calcs, function (c) { return c.vat; }) + ac.vat), whtTotal: round2(sum(calcs, function (c) { return c.wht; }) + ac.wht), vatWhtTotal: round2(sum(calcs, function (c) { return c.vatWht; }) + ac.vatWht),
       variationTotal: variationTotal(p),
-      taxWithheld: sum(calcs, function (c) { return c.wht + c.vatWht; }),
-      clientOutstanding: sum(calcs, function (c) { return c.balance; }),
+      taxWithheld: round2(sum(calcs, function (c) { return c.wht + c.vatWht; }) + ac.wht + ac.vatWht),
+      clientOutstanding: round2(sum(calcs, function (c) { return c.balance; }) + ac.balance),
       costByCode: costByCode, costTotal: costTotal,
       budgetTotal: budgetTotal, budgetRemaining: round2(budgetTotal - costTotal),
       billsTotal: billsTotal, billsPaid: billsPaid, billsOutstanding: round2(billsTotal - billsPaid),
@@ -1578,7 +1607,7 @@
     buildCsv: buildCsv, parseCsv: parseCsv, entriesFromCsv: entriesFromCsv,
     totals: totals, filterEntries: filterEntries, monthOf: monthOf,
     monthTotals: monthTotals, categoryTotals: categoryTotals, shiftMonth: shiftMonth, lastMonths: lastMonths,
-    billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc,
+    billPaid: billPaid, billBalance: billBalance, certReceived: certReceived, certCalc: certCalc, advanceCalc: advanceCalc,
     projectBooks: projectBooks, projectSummary: projectSummary, supplierBalances: supplierBalances,
     payroll: payroll, markPaid: markPaid, weekRange: weekRange, projectReportCsv: projectReportCsv,
     sanitizeBoqItem: sanitizeBoqItem, contractWithVat: contractWithVat, itemAmount: itemAmount, rateStr: rateStr, rawSum: rawSum, itemEarned: itemEarned, boqVariation: boqVariation, variationOrderNo: variationOrderNo, migrateBoq: migrateBoq, boqLineTotals: boqLineTotals, SUM_DEFAULT: SUM_DEFAULT, isLineRow: isLineRow, isItemRow: isItemRow, isGroupRow: isGroupRow, sanitizeVariation: sanitizeVariation, certVariation: certVariation, variationTotal: variationTotal, isHeading: isHeading, isSumRow: isSumRow, boqSubtotals: boqSubtotals,

@@ -1922,6 +1922,7 @@
     info.appendChild(btn(t('edit_project'), 'block', function () { editProject(p); }));
     body.appendChild(info);
 
+    if (p.advance > 0) advanceCard(body, p);
     if (!p.certs.length) body.appendChild(el('p', 'empty', t('no_certs')));
     p.certs.slice().sort(function (a, c) { return a.date < c.date ? 1 : a.date > c.date ? -1 : c.id - a.id; }).forEach(function (cert) {
       var c = L.certCalc(p, cert);
@@ -1981,6 +1982,90 @@
       card.appendChild(row);
       body.appendChild(card);
     });
+  }
+
+  /* --- advance payment (paid once, with VAT and the two tax deductions, no retention) --- */
+  function advanceCard(body, p) {
+    var a = L.advanceCalc(p), card = panel(null);
+    card.appendChild(el('h3', null, t('adv_title') + ' (' + pct(p.advancePct) + ')'));
+    card.appendChild(kv(t('adv_before_vat'), money(a.base)));
+    card.appendChild(kv('+ ' + t('vat_amt') + ' (' + pct(p.vat) + ')', money(a.vat)));
+    card.appendChild(kv(t('payable'), money(a.payable), 'total'));
+    card.appendChild(el('h4', 'subhead', t('pay_to_contractor')));
+    card.appendChild(kv('− ' + t('wht_amt') + ' (' + pct(p.wht) + ')', money(a.wht)));
+    card.appendChild(kv('− ' + t('vat_wht_amt') + ' (' + pct(p.vatWhtPct) + ' ' + t('of_vat') + ')', money(a.vatWht)));
+    card.appendChild(kv(t('cash_due'), money(a.cashDue), 'total'));
+    card.appendChild(kv(t('wht_receipt'), p.advRecv.wht || t('receipt_missing'), p.advRecv.wht || !(a.wht > 0) ? '' : 'neg'));
+    card.appendChild(kv(t('vat_wht_receipt'), p.advRecv.vatWht || t('receipt_missing'), p.advRecv.vatWht || !(a.vatWht > 0) ? '' : 'neg'));
+    if (a.assumed) card.appendChild(el('p', 'note', t('adv_assumed')));
+    else {
+      card.appendChild(kv(t('cash_received'), money(a.received)));
+      card.appendChild(kv(t('tax_settled'), money(a.taxSettled)));
+      card.appendChild(kv(t('balance_due'), money(a.balance), a.balance > 0 ? 'pos' : ''));
+    }
+    p.advRecv.receipts.forEach(function (rc) {
+      var r = el('div', 'pay');
+      r.appendChild(el('span', null, fmtDate(rc.date) + ' · ' + money(rc.amount)));
+      r.appendChild(btn('✕', '', function () {
+        if (!window.confirm(t('confirm_remove_payment'))) return;
+        if (rc.entryId && rc.bookId) removeEntryFromBook(rc.bookId, rc.entryId);
+        p.advRecv.receipts = p.advRecv.receipts.filter(function (x) { return x.id !== rc.id; });
+        save(); renderAll();
+      }));
+      card.appendChild(r);
+    });
+    var row = el('div', 'btnrow');
+    if (a.assumed || a.balance > 0) row.appendChild(btn(t('adv_receive'), 'primary', function () { receiveAdvance(p); }));
+    row.appendChild(btn(t('print'), '', function () { printAdvance(p); }));
+    row.appendChild(btn(t('export_cert_xlsx'), '', function () {
+      saveWorkbook('Advance-' + safeName(p.name), window.CBExcel.advanceWorkbook(p));
+    }));
+    row.appendChild(btn(t('tax_receipts'), '', function () {
+      openForm({
+        title: t('tax_receipts'),
+        fields: [
+          { key: 'wht', label: t('wht_receipt'), type: 'text', value: p.advRecv.wht, max: 30 },
+          { key: 'vatWht', label: t('vat_wht_receipt'), type: 'text', value: p.advRecv.vatWht, max: 30 }
+        ],
+        onSubmit: function (v) { p.advRecv.wht = v.wht.slice(0, 30); p.advRecv.vatWht = v.vatWht.slice(0, 30); save(); renderAll(); return null; }
+      });
+    }));
+    card.appendChild(row);
+    body.appendChild(card);
+  }
+  function receiveAdvance(p) {
+    var a = L.advanceCalc(p), books = linkedBookOptions(p, true);
+    var def = a.assumed ? L.round2(a.payable - a.taxSettled) : a.balance;
+    openForm({
+      title: t('adv_receive'),
+      fields: [
+        { key: 'date', label: t('payment_date'), type: 'date', value: L.todayStr(), required: true },
+        { key: 'amount', label: t('pay_amount'), type: 'number', min: 0.01, value: def, required: true },
+        { key: 'bookId', label: t('record_in_book'), type: 'select', options: books, value: books.length > 1 ? books[1].value : '' }
+      ],
+      onSubmit: function (v) {
+        var date = L.isDate(v.date) ? v.date : L.todayStr();
+        var amount = L.round2(v.amount);
+        if (!window.confirm(t('cf_receive', { amount: money(amount), name: t('adv_title') }))) return '\u00a0';
+        var rc = { id: L.newId(), date: date, amount: amount, entryId: 0, bookId: '' };
+        var target = v.bookId ? bookById(v.bookId) : null;
+        if (target) {
+          var e = L.sanitizeEntry({ id: L.newId(), type: 'in', amount: amount, date: date, category: t('adv_title'), note: '', party: p.client });
+          target.entries.push(e);
+          rc.entryId = e.id; rc.bookId = target.id;
+        }
+        p.advRecv.receipts.push(L.sanitizePayment(rc));
+        p.advRecv.assumed = false;
+        save(); renderAll();
+        return null;
+      }
+    });
+  }
+  function printAdvance(p) {
+    printDoc(t('adv_cert_title'), window.CBPrint.advanceHtml({
+      t: t, money: money, lang: state.settings.lang, project: p, calc: L.advanceCalc(p), date: L.todayStr(),
+      fmt: function (d) { return fmtDate(d, true); }
+    }));
   }
 
   function refreshDraftCert(p, cert, quiet) {
@@ -2765,7 +2850,7 @@
 
   function openReminderTarget(r) {
     ui.projectId = r.projectId;
-    ui.section = r.kind === 'cert' ? 'client' : r.kind === 'wages' ? 'labour' : 'bills';
+    ui.section = r.kind === 'cert' || r.kind === 'advance' ? 'client' : r.kind === 'wages' ? 'labour' : 'bills';
     showView('projects'); renderProjects(); renderReminders(); window.scrollTo(0, 0);
   }
   function reminderActions(r) {
@@ -2779,6 +2864,7 @@
       var cert = p.certs.filter(function (c) { return c.id === r.id; })[0];
       if (cert) items.push({ label: t('rem_received'), run: function () { receiveCert(p, cert); } });
     }
+    if (p && r.kind === 'advance') items.push({ label: t('rem_received'), run: function () { receiveAdvance(p); } });
     [1, 3, 7].forEach(function (n) {
       items.push({ label: t('rem_snooze', { n: n }), run: function () { var m = remMap(); m[key] = L.addDaysStr(L.todayStr(), n); remSave(m); toast(t('rem_snoozed', { n: n })); } });
     });
@@ -2802,7 +2888,7 @@
           var title, text;
           if (e.kind === 'summary') {
             title = t('nt_summary_title', { n: e.n });
-            text = (e.overdue ? t('nt_overdue', { n: e.overdue }) + '. ' : '') + e.items.map(function (r) { return (r.kind === 'wages' ? t('fc_wages') : r.who || r.desc || '') + ' ' + money(r.amount); }).join(', ');
+            text = (e.overdue ? t('nt_overdue', { n: e.overdue }) + '. ' : '') + e.items.map(function (r) { return (r.kind === 'wages' ? t('fc_wages') : r.kind === 'advance' ? t('adv_title') : r.who || r.desc || '') + ' ' + money(r.amount); }).join(', ');
           } else {
             var r = e.item;
             title = (r.kind === 'cert' ? t('nt_due_cert') : r.kind === 'wages' ? t('nt_due_wages') : t('nt_due_bill')) + (r.kind === 'wages' ? '' : ': ' + (r.who || r.desc || ''));
@@ -2855,7 +2941,7 @@
       var row = el('button', 'remrow ' + r.level);
       row.type = 'button';
       var tx = el('span', 'stext');
-      tx.appendChild(el('b', null, r.kind === 'wages' ? t('fc_wages') : (r.kind === 'cert' ? t('unpaid_cert') + ': ' : '') + (r.who || '—')));
+      tx.appendChild(el('b', null, r.kind === 'wages' ? t('fc_wages') : r.kind === 'advance' ? t('adv_title') : (r.kind === 'cert' ? t('unpaid_cert') + ': ' : '') + (r.who || '—')));
       var cnote = r.note ? t('cn_' + r.note.split(':')[0], { n: r.note.split(':')[1] }) : '';
       tx.appendChild(el('small', 'muted', [r.project, r.desc, cnote, r.due ? t('due_label') + ' ' + fmtDate(r.due) : ''].filter(Boolean).join(' · ')));
       row.appendChild(tx);
@@ -3033,7 +3119,7 @@
     return 'handled';
   };
 
-  var APP_VERSION = '2.23.1', APP_BUILD = 45;
+  var APP_VERSION = '2.24.0', APP_BUILD = 46;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
