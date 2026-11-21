@@ -162,6 +162,10 @@
     h += row(t('adv_before_vat') + ' (' + p.advancePct + '%)', m(k.base));
     h += row('+ ' + t('vat_amt') + ' (' + p.vat + '%)', m(k.vat));
     h += row(t('payable'), m(k.payable), 'total');
+    h += '</table><h2>' + esc(t('pay_to_contractor')) + '</h2><table>';
+    h += row('− ' + t('wht_amt') + ' (' + p.wht + '%)', m(k.wht));
+    h += row('− ' + t('vat_wht_amt') + ' (' + p.vatWhtPct + '% ' + t('of_vat') + ')', m(k.vatWht));
+    h += row(t('cash_due'), m(k.cashDue), 'total');
     h += '</table>';
     h += signatures(d);
     return page(t('adv_cert_title'), d.lang, h);

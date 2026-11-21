@@ -249,9 +249,10 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
-## 2.24.1
+## 2.24.2
 
-- **Advance payment has no withholding tax or VAT withheld** (VAT stays). The advance Excel now uses the contractor's original Certificate sheet layout, titled *Advance Payment Certificate*.
+- The advance payment in the app keeps its withholding tax and VAT withheld (card, tax receipts, totals, printout). They are left out of the **advance Excel only**, which uses the contractor's original Certificate sheet layout.
+- In the certificate and advance Excel, the *Previous payments* and *Advance repaid* tables show the certificate number (IPC-1…) for each payment and leave rows **empty** when there is no payment (no more 1st/2nd/3rd filler).
 
 ## 2.24.0
 

@@ -314,7 +314,7 @@
     function ordinal(n) { var s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
     for (var i = 0; i < nPay; i++) {
       var rr = 18 + i, c = prev[i];
-      put(rr, B, { v: (c && c.no) ? c.no : ordinal(i + 1), s: box });
+      put(rr, B, { v: c ? (c.no || ordinal(i + 1)) : '', s: box });
       put(rr, Cc, c ? { v: c.gross, s: boxN } : { s: boxN });
       put(rr, D, c ? { f: 'C' + rr + '*' + vat + '+C' + rr, v: c.gross * (1 + vat), s: boxN } : { s: boxN });
     }
@@ -333,7 +333,7 @@
     var nAdv = Math.max(3, upto.length);
     for (var j = 0; j < nAdv; j++) {
       var ar = a0 + 3 + j, ac = upto[j];
-      put(ar, B, { v: (ac && ac.no) ? ac.no : ordinal(j + 1), s: box });
+      put(ar, B, { v: ac ? (ac.no || ordinal(j + 1)) : '', s: box });
       put(ar, Cc, ac ? { v: ac.advanceRecovery, s: boxN } : { s: boxN }); put(ar, D, { s: box }); merges.push('C' + ar + ':D' + ar);
     }
     var aEnd = a0 + 3 + nAdv;
@@ -429,7 +429,7 @@
     put(16, B, { v: 'Payment', s: head }); put(16, Cc, { s: box }); put(16, D, { s: box }); merges.push('B16:D16');
     put(17, B, { v: 'Payment No.', s: box }); put(17, Cc, { v: 'Without VAT', s: box }); put(17, D, { v: 'With VAT', s: box });
     function ordinal(n) { var s2 = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s2[(v - 20) % 10] || s2[v] || s2[0]); }
-    for (var i = 0; i < 3; i++) { put(18 + i, B, { v: ordinal(i + 1), s: box }); put(18 + i, Cc, { s: boxN }); put(18 + i, D, { s: boxN }); }
+    for (var i = 0; i < 3; i++) { put(18 + i, B, { s: box }); put(18 + i, Cc, { s: boxN }); put(18 + i, D, { s: boxN }); }
     put(21, B, { v: 'Total', s: boxB }); put(21, Cc, { s: boxN }); put(21, D, { s: boxNB });
 
     // advance block (left)
@@ -438,7 +438,7 @@
     put(a0, B, { v: 'Description', s: box }); put(a0, Cc, { v: 'Amount (Birr)', s: box }); put(a0, D, { s: box }); merges.push('C' + a0 + ':D' + a0);
     put(a0 + 1, B, { v: 'Advance paid (' + p.advancePct + '%)', s: box }); put(a0 + 1, Cc, { f: 'H12*' + (p.advancePct / 100), v: a.payable, s: boxNB }); put(a0 + 1, D, { s: box }); merges.push('C' + (a0 + 1) + ':D' + (a0 + 1));
     put(a0 + 2, B, { v: 'Advance Repaid', s: box }); put(a0 + 2, Cc, { s: box }); put(a0 + 2, D, { s: box }); merges.push('C' + (a0 + 2) + ':D' + (a0 + 2));
-    for (var j = 0; j < 3; j++) { var ar = a0 + 3 + j; put(ar, B, { v: ordinal(j + 1), s: box }); put(ar, Cc, { s: boxN }); put(ar, D, { s: box }); merges.push('C' + ar + ':D' + ar); }
+    for (var j = 0; j < 3; j++) { var ar = a0 + 3 + j; put(ar, B, { s: box }); put(ar, Cc, { s: boxN }); put(ar, D, { s: box }); merges.push('C' + ar + ':D' + ar); }
     put(a0 + 6, B, { v: 'Adva. Repaid to date', s: box }); put(a0 + 6, Cc, { f: 'SUM(C' + (a0 + 3) + ':C' + (a0 + 5) + ')', v: 0, s: boxNB }); put(a0 + 6, D, { s: box }); merges.push('C' + (a0 + 6) + ':D' + (a0 + 6));
     put(a0 + 7, B, { v: 'Out standing Advance', s: box }); put(a0 + 7, Cc, { f: 'C' + (a0 + 1) + '-C' + (a0 + 6), v: a.payable, s: boxNB }); put(a0 + 7, D, { s: box }); merges.push('C' + (a0 + 7) + ':D' + (a0 + 7));
 
