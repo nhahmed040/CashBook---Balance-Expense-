@@ -249,6 +249,10 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
+## 2.24.3
+
+- **Advance Excel matches the app**: the advance on the Advance Payment Certificate is worked out from the main contract with VAT (variation orders and rebate no longer change it), so the sheet and the app always show the same amount.
+
 ## 2.24.2
 
 - The advance payment in the app keeps its withholding tax and VAT withheld (card, tax receipts, totals, printout). They are left out of the **advance Excel only**, which uses the contractor's original Certificate sheet layout.

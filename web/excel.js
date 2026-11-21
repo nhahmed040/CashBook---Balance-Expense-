@@ -436,7 +436,7 @@
     var a0 = 24;
     put(a0 - 1, B, { v: 'Advance Payment', s: head }); put(a0 - 1, Cc, { s: box }); put(a0 - 1, D, { s: box }); merges.push('B' + (a0 - 1) + ':D' + (a0 - 1));
     put(a0, B, { v: 'Description', s: box }); put(a0, Cc, { v: 'Amount (Birr)', s: box }); put(a0, D, { s: box }); merges.push('C' + a0 + ':D' + a0);
-    put(a0 + 1, B, { v: 'Advance paid (' + p.advancePct + '%)', s: box }); put(a0 + 1, Cc, { f: 'H12*' + (p.advancePct / 100), v: a.payable, s: boxNB }); put(a0 + 1, D, { s: box }); merges.push('C' + (a0 + 1) + ':D' + (a0 + 1));
+    put(a0 + 1, B, { v: 'Advance paid (' + p.advancePct + '%)', s: box }); put(a0 + 1, Cc, p.contractSum > 0 ? { f: 'H6*' + (1 + vat) + '*' + (p.advancePct / 100), v: a.payable, s: boxNB } : { v: a.payable, s: boxNB });   // % of the main contract with VAT (variations and rebate do not change the advance) put(a0 + 1, D, { s: box }); merges.push('C' + (a0 + 1) + ':D' + (a0 + 1));
     put(a0 + 2, B, { v: 'Advance Repaid', s: box }); put(a0 + 2, Cc, { s: box }); put(a0 + 2, D, { s: box }); merges.push('C' + (a0 + 2) + ':D' + (a0 + 2));
     for (var j = 0; j < 3; j++) { var ar = a0 + 3 + j; put(ar, B, { s: box }); put(ar, Cc, { s: boxN }); put(ar, D, { s: box }); merges.push('C' + ar + ':D' + ar); }
     put(a0 + 6, B, { v: 'Adva. Repaid to date', s: box }); put(a0 + 6, Cc, { f: 'SUM(C' + (a0 + 3) + ':C' + (a0 + 5) + ')', v: 0, s: boxNB }); put(a0 + 6, D, { s: box }); merges.push('C' + (a0 + 6) + ':D' + (a0 + 6));
@@ -444,7 +444,7 @@
 
     // the amount of this certificate (right), same blocks as on the certificate
     put(21, G, { v: 'A) Advance Payment ', s: head }); put(21, H, { s: head }); merges.push('G21:H21');
-    put(22, G, { v: 'Advance (excl. VAT)', s: st({ b: true, fill: HEAD_FILL }, box) }); put(22, H, { f: 'H12*' + (p.advancePct / 100) + '/' + (1 + vat), v: a.base, s: st({ fill: HEAD_FILL }, boxNB) });
+    put(22, G, { v: 'Advance (excl. VAT)', s: st({ b: true, fill: HEAD_FILL }, box) }); put(22, H, p.contractSum > 0 ? { f: 'H6*' + (p.advancePct / 100), v: a.base, s: st({ fill: HEAD_FILL }, boxNB) } : { v: a.base, s: st({ fill: HEAD_FILL }, boxNB) });
     put(23, G, { v: 'Vat (' + p.vat + '%)', s: box }); put(23, H, { f: vat + '*H22', v: a.vat, s: boxN });
     put(24, G, { v: 'Net advance', s: box }); put(24, H, { f: 'SUM(H22:H23)', v: a.payable, s: boxN });
     put(25, F, { v: 'Deductions', s: head }); put(25, G, { v: 'A=Total', s: boxB }); put(25, H, { f: 'H24', v: a.payable, s: boxNB });

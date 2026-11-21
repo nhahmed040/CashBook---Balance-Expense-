@@ -3119,7 +3119,7 @@
     return 'handled';
   };
 
-  var APP_VERSION = '2.24.2', APP_BUILD = 48;
+  var APP_VERSION = '2.24.3', APP_BUILD = 49;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
