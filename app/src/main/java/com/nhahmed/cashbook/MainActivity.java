@@ -66,6 +66,23 @@ public class MainActivity extends Activity {
     private WebView printView; // kept so the print job's WebView is not garbage-collected
     private ValueCallback<Uri[]> filePathCallback;
 
+    /* Back button: the page decides (close a sheet, go up a level, "press again to exit").
+       It answers 'handled', 'exit' (close the app) or 'bg' (PIN screen: just hide the app). */
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        if (web == null) { super.onBackPressed(); return; }
+        web.evaluateJavascript("(window.cbBack ? window.cbBack() : 'exit')", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                String v = value == null ? "" : value.replace("\"", "");
+                if (v.equals("handled")) return;
+                if (v.equals("bg")) { moveTaskToBack(true); return; }
+                finish();
+            }
+        });
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

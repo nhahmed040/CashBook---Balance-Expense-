@@ -44,7 +44,7 @@
       import_counts: '{i} items, {r} plain rows, {l} summary lines, {g} group titles, {s} totals. Contract total {tot}.',
       import_skipped: '{n} total/VAT rows left out (the app works them out).',
       import_replace: 'Replace the current BoQ ({n} rows)', import_add: 'Add after the current rows',
-      import_replace_confirm: 'Replace the {n} BoQ rows of “{name}” with the imported rows?', import_do: 'Import', import_with_done: 'Also import work done (“Current Quantity” column): {n} items', import_qty_done: 'done',
+      import_replace_confirm: 'Replace the {n} BoQ rows of “{name}” with the imported rows?', import_do: 'Import', import_with_done: 'Also import work done (“Current Quantity” column): {n} items', import_qty_done: 'done', back_exit: 'Press Back again to exit', back_discard_title: 'Discard changes?', back_discard_text: 'What you typed has not been saved.', back_keep: 'Keep editing', back_discard: 'Discard',
       import_done: 'Imported {n} rows', import_no_boq: 'No BoQ table found. The sheet needs Description, Qty and Rate columns.', import_replaced: 'BoQ replaced by import',
       about_new_8: 'One backup file with data and photos, a 7-day backup reminder, and Recently deleted (30 days, with Undo)',
       deleted_toast: 'Deleted “{n}”', undo: 'Undo', restored_item: 'Restored', cleared: 'cleared', recently_deleted: 'Recently deleted',

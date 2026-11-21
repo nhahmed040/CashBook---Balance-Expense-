@@ -241,7 +241,7 @@
     toastTimer = setTimeout(function () { e.classList.remove('show'); }, action ? 7000 : 2600);
   }
 
-  function openModal(id) { $(id).classList.add('open'); }
+  function openModal(id) { $(id)._dirty = false; $(id).classList.add('open'); }
   function closeModal(id) { $(id).classList.remove('open'); }
 
   function el(tag, cls, text) {
@@ -3064,7 +3064,60 @@
   $('closeBook').addEventListener('click', function () { closeModal('bookModal'); });
 
   /* About */
-  var APP_VERSION = '2.21.1', APP_BUILD = 42;
+  /* ---------- Android Back button ----------
+     The Android wrapper calls window.cbBack() and acts on the answer:
+       'handled' = the page used the press, 'exit' = close the app, 'bg' = send the app to the background (PIN screen). */
+  document.addEventListener('input', function (ev) { var o = ev.target && ev.target.closest && ev.target.closest('.overlay'); if (o && !o.hasAttribute('data-noguard')) o._dirty = true; }, true);
+  document.addEventListener('change', function (ev) { var o = ev.target && ev.target.closest && ev.target.closest('.overlay'); if (o && !o.hasAttribute('data-noguard')) o._dirty = true; }, true);
+  var lastBack = 0;
+  function backConfirmDiscard(onDiscard) {
+    var ov = el('div', 'overlay open sheetov backask'), m = el('div', 'modal');
+    ov.setAttribute('data-noguard', '1');
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    m.appendChild(el('h2', null, t('back_discard_title')));
+    m.appendChild(el('p', null, t('back_discard_text')));
+    m.appendChild(btn(t('back_keep'), 'block primary', close));
+    m.appendChild(btn(t('back_discard'), 'block danger', function () { close(); onDiscard(); }));
+    ov.appendChild(m);
+    document.body.appendChild(ov);
+  }
+  function photosPending() {
+    return formStates.some(function (s) { return s.added.length || s.removed.length; }) || entryPhotoSt.added.length > 0 || entryPhotoSt.removed.length > 0;
+  }
+  window.cbBack = function () {
+    if ($('lock').classList.contains('open')) return 'bg';
+    var sheets = document.querySelectorAll('.overlay.sheetov');
+    if (sheets.length) {
+      var top = sheets[sheets.length - 1];
+      if (top.classList.contains('backask')) { top.parentNode.removeChild(top); return 'handled'; }
+      var gone = function () { if (top.parentNode) top.parentNode.removeChild(top); };
+      if (top._dirty) backConfirmDiscard(gone); else gone();
+      return 'handled';
+    }
+    var stat = [['photoView', 'photoClose'], ['formModal', 'formCancel'], ['entryModal', 'cancelEntry'], ['pinModal', 'cancelPin'], ['bookModal', 'closeBook'], ['aboutModal', null]];
+    for (var i = 0; i < stat.length; i++) {
+      var node = $(stat[i][0]);
+      if (!node || !node.classList.contains('open')) continue;
+      var close = function (n, b) { return function () { if (b) $(b).click(); else n.classList.remove('open'); }; }(node, stat[i][1]);
+      var guarded = stat[i][0] === 'formModal' || stat[i][0] === 'entryModal' || stat[i][0] === 'pinModal';
+      if (guarded && (node._dirty || photosPending())) backConfirmDiscard(close); else close();
+      return 'handled';
+    }
+    if (ui.view === 'projects' && ui.projectId) {
+      if (ui.section && ui.section !== 'overview') ui.section = 'overview'; else ui.projectId = '';
+      renderProjects(); window.scrollTo(0, 0);
+      return 'handled';
+    }
+    if (ui.view !== 'entries') { showView('entries'); return 'handled'; }
+    if (ui.bookOpen) { ui.bookOpen = false; renderAll(); window.scrollTo(0, 0); return 'handled'; }
+    var now = Date.now();
+    if (now - lastBack < 2000) { lastBack = 0; return 'exit'; }
+    lastBack = now;
+    toast(t('back_exit'));
+    return 'handled';
+  };
+
+  var APP_VERSION = '2.22.0', APP_BUILD = 43;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });
