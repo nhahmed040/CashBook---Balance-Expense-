@@ -380,52 +380,92 @@
     return { name: 'Certificate', cols: [2.6, 24.7, 16, 17.3, 9.1, 34.4, 26.9, 21.6], rows: rows, merges: merges, heights: heights, hideGrid: true };
   }
 
-  /* Advance payment certificate: one sheet only (no Summary, BOQ or Variation Order sheets). */
+  /* Advance payment certificate: one sheet only (no Summary, BOQ or Variation Order sheets), laid out exactly like the
+     Certificate sheet of the contractor's workbook. The advance is a % of the contract total including VAT; there is no
+     retention, withholding tax or VAT withheld on it. */
   function advanceSheet(p) {
     var rows = [], merges = [], heights = {};
     function put(r, c, v) { while (rows.length < r) rows.push(null); if (!rows[r - 1]) rows[r - 1] = []; rows[r - 1][c] = v; }
-    var B = 1, Cc = 2, D = 3;
+    var B = 1, Cc = 2, D = 3, F = 5, G = 6, H = 7;
     var base = { font: C, sz: 12 };
     var bold = st({ b: true }, base);
-    var box = st({ border: 'medium' }, base), boxB = st({ b: true }, box);
-    var boxN = st({ fmt: MONEY, h: 'right', border: 'medium' }, base), boxNB = st({ b: true }, boxN);
-    var head = st({ fill: HEAD_FILL, h: 'center' }, boxB);
-    var a = L.advanceCalc(p), vp = p.vat / 100;
+    var box = st({ border: 'medium', h: 'center' }, base);
+    var boxB = st({ b: true }, box);
+    var boxN = st({ fmt: MONEY, h: 'right', border: 'medium' }, base);
+    var boxNB = st({ b: true }, boxN);
+    var head = st({ fill: HEAD_FILL }, boxB);
+    var vat = p.vat / 100, a = L.advanceCalc(p);
+    var list = L.sortedCerts(p);
+    var cumAdv = r2(list.reduce(function (x, c) { return x + c.advanceRecovery; }, 0));
 
     put(3, B, { v: 'ADVANCE PAYMENT CERTIFICATE', s: st({ b: true, sz: 18, h: 'center', border: 'thick', fill: HEAD_FILL }, base) });
-    put(3, Cc, { s: st({ border: 'thick', fill: HEAD_FILL }, base) }); put(3, D, { s: st({ border: 'thick', fill: HEAD_FILL }, base) });
-    merges.push('B3:D3'); heights[3] = 30;
+    for (var k = 2; k <= 7; k++) put(3, k, { s: st({ border: 'thick', fill: HEAD_FILL }, base) });
+    merges.push('B3:H3'); heights[3] = 30;
     var lab = st({ b: true, sz: 14, h: 'right' }, base), val = st({ b: true, sz: 14, h: 'left' }, base);
     [['Project :', p.name], ['Client :', p.client], ['Contractor :', p.contractor], ['Location :', p.location]].forEach(function (x, i) {
-      put(5 + i, B, { v: x[0], s: lab }); put(5 + i, Cc, { v: x[1], s: val }); merges.push('C' + (5 + i) + ':D' + (5 + i));
+      put(5 + i, B, { v: x[0], s: lab }); put(5 + i, Cc, { v: x[1], s: val }); merges.push('C' + (5 + i) + ':F' + (5 + i));
     });
 
-    put(10, B, { v: 'Description', s: head }); put(10, Cc, { v: 'Rate', s: head }); put(10, D, { v: 'Amount (Birr)', s: head });
-    var live = p.contractSum > 0;   // an advance typed as an amount on a project without a contract sum has no formula to live from
-    var lines = [
-      ['Main contract (before VAT)', null, live ? { v: p.contractSum } : { v: '-' }],
-      ['Advance payment', live ? p.advancePct / 100 : null, live ? { f: 'D11*C12', v: a.base } : { v: a.base }],
-      ['VAT', vp, { f: 'D12*C13', v: a.vat }],
-      ['Net payable (Advance + VAT)', null, { f: 'D12+D13', v: a.payable }, true],
-      ['Withholding tax', p.wht / 100, { f: '-D12*C15', v: -a.wht }],
-      ['VAT withheld', (p.vatWhtPct == null ? 50 : p.vatWhtPct) / 100, { f: '-D13*C16', v: -a.vatWht }],
-      ['Cash to receive', null, { f: 'D14+D15+D16', v: a.cashDue }, true]
-    ];
-    var pctSt = st({ fmt: '0.0%', h: 'center', border: 'medium' }, base);
-    lines.forEach(function (x, i) {
-      var r = 11 + i;
-      put(r, B, { v: x[0], s: x[3] ? boxB : box });
-      put(r, Cc, x[1] == null ? { s: box } : { v: x[1], s: pctSt });
-      put(r, D, { v: x[2].v, f: x[2].f, s: x[3] ? st({ fill: HEAD_FILL }, boxNB) : boxN });
-    });
-    put(19, B, { v: 'Withholding tax receipt No.', s: box }); put(19, Cc, { v: p.advRecv.wht || '', s: box }); put(19, D, { s: box }); merges.push('C19:D19');
-    put(20, B, { v: 'VAT withheld receipt No.', s: box }); put(20, Cc, { v: p.advRecv.vatWht || '', s: box }); put(20, D, { s: box }); merges.push('C20:D20');
-    put(22, B, { v: 'We certify that the contractor' + (p.contractor ? ' (' + p.contractor + ')' : '') + ' is entitled to an advance payment of Birr (' + L.amountWords(a.payable) + ').', s: st({ b: true, sz: 12, wrap: true, v: 'top' }, base) });
-    merges.push('B22:D22'); heights[22] = 40;
-    put(25, B, { v: p.contractor ? 'Certified by: ' + p.contractor : 'Certified by:______________________', s: bold }); put(25, D, { v: 'Approved by', s: st({ b: true, h: 'right' }, base) });
-    put(26, B, { v: 'Signature:____________', s: bold }); put(26, D, { v: 'Signature : ______________', s: st({ b: true, h: 'right' }, base) });
-    put(27, B, { v: 'Date_______________', s: bold }); put(27, D, { v: 'Date : ______________', s: st({ b: true, h: 'right' }, base) });
-    return { name: 'Advance Payment', cols: [2.6, 44, 14, 30], rows: rows, merges: merges, heights: heights, hideGrid: true };
+    // contract value block (right), the same as on the certificate
+    var vTot = L.variationTotal(p);
+    var rebateAmt = r2(-(p.contractSum + vTot) * p.rebate / 100), afterRebate = r2(p.contractSum + vTot + rebateAmt);
+    var cvLab = st({ h: 'right', border: 'medium' }, base);
+    put(5, G, { v: 'Contract Value', s: head }); put(5, H, { v: 'Amount(Birr)', s: head });
+    function cv(r, label, c, bold2) {
+      put(r, G, { v: label, s: cvLab });
+      var o = { v: c.v, f: c.f, s: bold2 ? boxNB : boxN };
+      if (c.v === '-') o.s = st({ h: 'center' }, boxN);
+      put(r, H, o);
+    }
+    cv(6, 'Main contract :', { v: p.contractSum });
+    cv(7, 'Supplementary Cont. :', { v: '-' });
+    cv(8, 'Variation orders :', vTot > 0 ? { v: vTot } : { v: '-' });
+    cv(9, 'Rebate(' + p.rebate + '%) :', p.rebate > 0 ? { f: '-(H6+H8)*' + (p.rebate / 100), v: rebateAmt } : { v: '-' });
+    cv(10, 'After rebate :', { f: 'SUM(H6:H9)', v: afterRebate }, true);
+    cv(11, p.vat + ' % VAT :', { f: 'H10*' + vat, v: afterRebate * vat }, true);
+    cv(12, 'Total :', { f: 'H10+H11', v: afterRebate * (1 + vat) }, true);
+
+    // payments table (left): none yet before the advance
+    put(16, B, { v: 'Payment', s: head }); put(16, Cc, { s: box }); put(16, D, { s: box }); merges.push('B16:D16');
+    put(17, B, { v: 'Payment No.', s: box }); put(17, Cc, { v: 'Without VAT', s: box }); put(17, D, { v: 'With VAT', s: box });
+    function ordinal(n) { var s2 = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s2[(v - 20) % 10] || s2[v] || s2[0]); }
+    for (var i = 0; i < 3; i++) { put(18 + i, B, { v: ordinal(i + 1), s: box }); put(18 + i, Cc, { s: boxN }); put(18 + i, D, { s: boxN }); }
+    put(21, B, { v: 'Total', s: boxB }); put(21, Cc, { s: boxN }); put(21, D, { s: boxNB });
+
+    // advance block (left)
+    var a0 = 24;
+    put(a0 - 1, B, { v: 'Advance Payment', s: head }); put(a0 - 1, Cc, { s: box }); put(a0 - 1, D, { s: box }); merges.push('B' + (a0 - 1) + ':D' + (a0 - 1));
+    put(a0, B, { v: 'Description', s: box }); put(a0, Cc, { v: 'Amount (Birr)', s: box }); put(a0, D, { s: box }); merges.push('C' + a0 + ':D' + a0);
+    put(a0 + 1, B, { v: 'Advance paid (' + p.advancePct + '%)', s: box }); put(a0 + 1, Cc, { f: 'H12*' + (p.advancePct / 100), v: a.payable, s: boxNB }); put(a0 + 1, D, { s: box }); merges.push('C' + (a0 + 1) + ':D' + (a0 + 1));
+    put(a0 + 2, B, { v: 'Advance Repaid', s: box }); put(a0 + 2, Cc, { s: box }); put(a0 + 2, D, { s: box }); merges.push('C' + (a0 + 2) + ':D' + (a0 + 2));
+    for (var j = 0; j < 3; j++) { var ar = a0 + 3 + j; put(ar, B, { v: ordinal(j + 1), s: box }); put(ar, Cc, { s: boxN }); put(ar, D, { s: box }); merges.push('C' + ar + ':D' + ar); }
+    put(a0 + 6, B, { v: 'Adva. Repaid to date', s: box }); put(a0 + 6, Cc, { f: 'SUM(C' + (a0 + 3) + ':C' + (a0 + 5) + ')', v: 0, s: boxNB }); put(a0 + 6, D, { s: box }); merges.push('C' + (a0 + 6) + ':D' + (a0 + 6));
+    put(a0 + 7, B, { v: 'Out standing Advance', s: box }); put(a0 + 7, Cc, { f: 'C' + (a0 + 1) + '-C' + (a0 + 6), v: a.payable, s: boxNB }); put(a0 + 7, D, { s: box }); merges.push('C' + (a0 + 7) + ':D' + (a0 + 7));
+
+    // the amount of this certificate (right), same blocks as on the certificate
+    put(21, G, { v: 'A) Advance Payment ', s: head }); put(21, H, { s: head }); merges.push('G21:H21');
+    put(22, G, { v: 'Advance (excl. VAT)', s: st({ b: true, fill: HEAD_FILL }, box) }); put(22, H, { f: 'H12*' + (p.advancePct / 100) + '/' + (1 + vat), v: a.base, s: st({ fill: HEAD_FILL }, boxNB) });
+    put(23, G, { v: 'Vat (' + p.vat + '%)', s: box }); put(23, H, { f: vat + '*H22', v: a.vat, s: boxN });
+    put(24, G, { v: 'Net advance', s: box }); put(24, H, { f: 'SUM(H22:H23)', v: a.payable, s: boxN });
+    put(25, F, { v: 'Deductions', s: head }); put(25, G, { v: 'A=Total', s: boxB }); put(25, H, { f: 'H24', v: a.payable, s: boxNB });
+    var ds = st({ h: 'left', border: 'thin' }, base);
+    put(26, F, { v: '1.Previous payments (net paid)', s: ds }); put(26, G, { s: boxN });
+    put(27, F, { v: '2.Retention', s: ds }); put(27, G, { s: boxN });
+    put(28, F, { v: '3.Advance Repayment', s: ds }); put(28, G, { s: boxN });
+    put(29, F, { v: '4.Penalty', s: ds }); put(29, G, { s: boxN });
+    put(30, F, { v: 'B = Total deductions (1 - 4)', s: st({ b: true, h: 'right' }, ds) }); put(30, G, { f: 'SUM(G26:G29)', v: 0, s: boxNB });
+    put(31, F, { v: 'C = Net (A-B)', s: ds }); put(31, G, { s: boxN }); put(31, H, { f: 'H25-G30', v: a.payable, s: boxN });
+    put(33, F, { v: 'G=Net pay to the contractor ©', s: st({ b: true, h: 'right' }, base) }); put(33, G, { s: boxN });
+    put(33, H, { f: 'H25-G30', v: a.payable, s: st({ fill: HEAD_FILL }, boxNB) });
+
+    var endRow = 35;
+    put(endRow, B, { v: 'We certify that the contractor' + (p.contractor ? ' (' + p.contractor + ')' : '') + ' is now entitled to the sum of Birr (' + L.amountWords(a.payable) + ').', s: st({ b: true, sz: 12, wrap: true, v: 'top' }, base) });
+    merges.push('B' + endRow + ':H' + endRow); heights[endRow] = 32;
+    var sg = endRow + 3;
+    put(sg, B, { v: p.contractor ? 'Certified by: ' + p.contractor : 'Certified by:______________________', s: bold }); put(sg, F, { v: 'Approved by', s: st({ b: true, h: 'right' }, base) }); put(sg, G, { v: '_____________________________', s: bold });
+    put(sg + 1, B, { v: 'Signature:____________', s: bold }); put(sg + 1, F, { v: 'Signature :  ', s: st({ b: true, h: 'right' }, base) }); put(sg + 1, G, { v: '_____________________________', s: bold });
+    put(sg + 2, B, { v: 'Date_______________', s: bold }); put(sg + 2, F, { v: 'Date :  ', s: st({ b: true, h: 'right' }, base) }); put(sg + 2, G, { v: '_____________________________', s: bold });
+    return { name: 'Certificate', cols: [2.6, 24.7, 16, 17.3, 9.1, 34.4, 26.9, 21.6], rows: rows, merges: merges, heights: heights, hideGrid: true };
   }
   function advanceWorkbook(project) {
     var p = prep(project);

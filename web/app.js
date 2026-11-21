@@ -1991,16 +1991,9 @@
     card.appendChild(kv(t('adv_before_vat'), money(a.base)));
     card.appendChild(kv('+ ' + t('vat_amt') + ' (' + pct(p.vat) + ')', money(a.vat)));
     card.appendChild(kv(t('payable'), money(a.payable), 'total'));
-    card.appendChild(el('h4', 'subhead', t('pay_to_contractor')));
-    card.appendChild(kv('− ' + t('wht_amt') + ' (' + pct(p.wht) + ')', money(a.wht)));
-    card.appendChild(kv('− ' + t('vat_wht_amt') + ' (' + pct(p.vatWhtPct) + ' ' + t('of_vat') + ')', money(a.vatWht)));
-    card.appendChild(kv(t('cash_due'), money(a.cashDue), 'total'));
-    card.appendChild(kv(t('wht_receipt'), p.advRecv.wht || t('receipt_missing'), p.advRecv.wht || !(a.wht > 0) ? '' : 'neg'));
-    card.appendChild(kv(t('vat_wht_receipt'), p.advRecv.vatWht || t('receipt_missing'), p.advRecv.vatWht || !(a.vatWht > 0) ? '' : 'neg'));
     if (a.assumed) card.appendChild(el('p', 'note', t('adv_assumed')));
     else {
       card.appendChild(kv(t('cash_received'), money(a.received)));
-      card.appendChild(kv(t('tax_settled'), money(a.taxSettled)));
       card.appendChild(kv(t('balance_due'), money(a.balance), a.balance > 0 ? 'pos' : ''));
     }
     p.advRecv.receipts.forEach(function (rc) {
@@ -2020,22 +2013,12 @@
     row.appendChild(btn(t('export_cert_xlsx'), '', function () {
       saveWorkbook('Advance-' + safeName(p.name), window.CBExcel.advanceWorkbook(p));
     }));
-    row.appendChild(btn(t('tax_receipts'), '', function () {
-      openForm({
-        title: t('tax_receipts'),
-        fields: [
-          { key: 'wht', label: t('wht_receipt'), type: 'text', value: p.advRecv.wht, max: 30 },
-          { key: 'vatWht', label: t('vat_wht_receipt'), type: 'text', value: p.advRecv.vatWht, max: 30 }
-        ],
-        onSubmit: function (v) { p.advRecv.wht = v.wht.slice(0, 30); p.advRecv.vatWht = v.vatWht.slice(0, 30); save(); renderAll(); return null; }
-      });
-    }));
     card.appendChild(row);
     body.appendChild(card);
   }
   function receiveAdvance(p) {
     var a = L.advanceCalc(p), books = linkedBookOptions(p, true);
-    var def = a.assumed ? L.round2(a.payable - a.taxSettled) : a.balance;
+    var def = a.assumed ? a.payable : a.balance;
     openForm({
       title: t('adv_receive'),
       fields: [
@@ -3119,7 +3102,7 @@
     return 'handled';
   };
 
-  var APP_VERSION = '2.24.0', APP_BUILD = 46;
+  var APP_VERSION = '2.24.1', APP_BUILD = 47;
   $('aboutBtn').addEventListener('click', function () { $('aboutVersion').textContent = APP_VERSION + ' (build ' + APP_BUILD + ')'; openModal('aboutModal'); });
   $('aboutBackup').addEventListener('click', function () { closeModal('aboutModal'); var b = $('backupBtn'); b.scrollIntoView({ block: 'center' }); b.click(); });
   $('closeAbout').addEventListener('click', function () { closeModal('aboutModal'); });

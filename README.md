@@ -249,10 +249,14 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
+## 2.24.1
+
+- **Advance payment has no withholding tax or VAT withheld** (VAT stays). The advance Excel now uses the contractor's original Certificate sheet layout, titled *Advance Payment Certificate*.
+
 ## 2.24.0
 
-- **Advance payment is a payment of its own.** The Client section has an *Advance payment* card: advance before VAT, + VAT, net payable (no retention), − withholding tax, − VAT withheld, cash to receive. **Receive advance** records the date and amount and puts a cash-in entry in the linked book; the two tax receipt numbers settle the rest. The advance counts in *Due from client* and in Reminders until it is received, and its VAT and taxes are included in the project totals.
-- **Excel / print for the advance** export a single *Advance Payment Certificate* sheet (no Summary, BOQ or Variation Order sheets).
+- **Advance payment is a payment of its own.** The Client section has an *Advance payment* card: advance before VAT, + VAT, net payable. No retention, withholding tax or VAT withheld on the advance. **Receive advance** records the date and amount and puts a cash-in entry in the linked book. The advance counts in *Due from client* and in Reminders until it is received.
+- **Excel / print for the advance** export a single *Certificate* sheet in the same layout as the contractor's workbook, titled *Advance Payment Certificate* (no Summary, BOQ or Variation Order sheets).
 - Projects that already had an advance start as “counted as received”, so none of their balances change; recording a receipt switches that off.
 
 ## 2.23.1

@@ -198,15 +198,13 @@
     var r = p.advRecv || { receipts: [], wht: '', vatWht: '', assumed: false };
     var payable = round2(num(p.advance, 0)), vp = num(p.vat, 0, 100);
     var vat = round2(payable * vp / (100 + vp)), base = round2(payable - vat);
-    var wht = round2(base * num(p.wht, 0, 100) / 100);
-    var vatWht = round2(vat * (p.vatWhtPct == null ? 50 : p.vatWhtPct) / 100);
     var received = sum(r.receipts, function (x) { return x.amount; });
-    var settled = round2((r.wht ? wht : 0) + (r.vatWht ? vatWht : 0));
     var assumed = !!r.assumed && received <= 0;
+    // no retention, withholding tax or VAT withheld on the advance: the client pays the whole net amount
     return {
-      base: base, vat: vat, payable: payable, wht: wht, vatWht: vatWht, cashDue: round2(payable - wht - vatWht),
-      received: received, taxSettled: settled, assumed: assumed,
-      balance: payable <= 0 || assumed ? 0 : round2(payable - settled - received)
+      base: base, vat: vat, payable: payable, cashDue: payable,
+      received: received, assumed: assumed,
+      balance: payable <= 0 || assumed ? 0 : round2(payable - received)
     };
   }
 
@@ -909,9 +907,9 @@
       payableTotal: payableTotal,
       received: round2(p.advance + payableTotal),
       advCalc: ac,
-      vatTotal: round2(sum(calcs, function (c) { return c.vat; }) + ac.vat), whtTotal: round2(sum(calcs, function (c) { return c.wht; }) + ac.wht), vatWhtTotal: round2(sum(calcs, function (c) { return c.vatWht; }) + ac.vatWht),
+      vatTotal: round2(sum(calcs, function (c) { return c.vat; }) + ac.vat), whtTotal: sum(calcs, function (c) { return c.wht; }), vatWhtTotal: sum(calcs, function (c) { return c.vatWht; }),
       variationTotal: variationTotal(p),
-      taxWithheld: round2(sum(calcs, function (c) { return c.wht + c.vatWht; }) + ac.wht + ac.vatWht),
+      taxWithheld: sum(calcs, function (c) { return c.wht + c.vatWht; }),
       clientOutstanding: round2(sum(calcs, function (c) { return c.balance; }) + ac.balance),
       costByCode: costByCode, costTotal: costTotal,
       budgetTotal: budgetTotal, budgetRemaining: round2(budgetTotal - costTotal),
