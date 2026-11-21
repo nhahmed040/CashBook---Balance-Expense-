@@ -249,6 +249,10 @@ Notes: the free Firebase plan is plenty for cash books. Anyone with your databas
 
 - Update progress: leftover differences up to 0.01 (for example 0.005) are treated as rounding noise and hidden.
 
+## 2.22.0
+
+- **Android Back button** now behaves the same everywhere: it closes the top sheet or dialog first (asking “Discard changes?” only if you typed something), then goes up one level (project section → project → list; other tabs → Entries; open book → books home). On the home screen the first press shows “Press Back again to exit”; the second, within 2 seconds, closes the app. On the PIN screen Back only hides the app.
+
 ## 2.21.1
 
 - **Excel BoQ import reads real-world sheets**: misspelt headers (“Discription”, “Quntity”), “Bill No” columns, signature blocks under the table, and descriptions up to 2,000 characters (they were cut at 400). “Current Quantity” / “To date quantity” columns are imported as work done (tick box in the preview).
